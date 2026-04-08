@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>THR Train Track — Hinge Rail Contraction/Expansion</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:#f8fafc;display:flex;flex-direction:column;align-items:center;padding:18px;min-height:100vh}
+  h1{font-size:17px;font-weight:600;color:#1e293b;margin-bottom:2px}
+  .sub{font-size:12px;color:#64748b;margin-bottom:14px;text-align:center;max-width:750px;line-height:1.5}
+  .stage{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:6px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  .cr{display:flex;gap:10px;margin-top:12px;align-items:center;flex-wrap:wrap}
+  .cr button{padding:7px 16px;font-size:13px;font-weight:500;border:1.5px solid #cbd5e1;border-radius:8px;cursor:pointer;background:#fff;color:#334155;transition:all .15s}
+  .cr button:hover{background:#f1f5f9}
+  .cr button:disabled{opacity:.3;cursor:default}
+  .pill{font-size:11px;padding:3px 10px;border-radius:6px;background:#f1f5f9;color:#64748b;font-weight:500}
+  .pill.uv{background:#faf5ff;color:#7c3aed}.pill.bl{background:#eff6ff;color:#2563eb}
+  .legend{display:flex;gap:14px;margin-top:8px;flex-wrap:wrap}
+  .legend span{display:flex;align-items:center;gap:4px;font-size:11px;color:#64748b}
+</style>
+</head>
+<body>
+
+<h1>THR Train Track — Hinge-Rail 1D Contraction & Expansion</h1>
+<p class="sub">Train track의 rail을 hinge protein으로 대체 → UV light: hinge open → rail 수축 → tie 간격 감소 / Blue light: hinge close → rail 팽창 → 원래 간격 복원</p>
+
+<div class="stage"><canvas id="cv" width="920" height="480"></canvas></div>
+
+<div class="cr">
+  <button id="btn-uv" onclick="startUV()">☀️ UV — Contract</button>
+  <button id="btn-bl" onclick="startBlue()" disabled>🔵 Blue — Expand</button>
+  <button onclick="resetAll()">↺ Reset</button>
+  <span id="pill" class="pill">Expanded (rest state)</span>
+</div>
+
+<div class="legend">
+  <span><svg width="20" height="10"><rect x="0" y="3" width="20" height="5" rx="2" fill="#2563eb"/></svg> Hinge (rail, closed)</span>
+  <span><svg width="20" height="10"><rect x="0" y="3" width="14" height="5" rx="2" fill="#7c3aed"/></svg> Hinge (rail, open/contracted)</span>
+  <span><svg width="10" height="16"><rect x="2" y="0" width="6" height="16" rx="1" fill="#ef4444"/></svg> Tie (C₂ interface)</span>
+  <span><svg width="14" height="10"><path d="M2 3 L7 8 L2 8" fill="none" stroke="#dc2626" stroke-width="2" stroke-linecap="round"/></svg> Azobenzene</span>
+  <span><svg width="14" height="14"><line x1="2" y1="7" x2="12" y2="7" stroke="#64748b" stroke-width="1.5" stroke-dasharray="2,2"/></svg> Length change</span>
+</div>
+
+<script>
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const W = cv.width, H = cv.height;
+
+// ── Config ──
+const NUM_TIES = 6;
+const RAIL_Y_TOP = 140;
+const RAIL_Y_BOT = 310;
+const RAIL_H = 20;
+const TIE_W = 14;
+const HINGE_UNIT_EXPANDED = 100; // spacing between ties when expanded
+const HINGE_UNIT_CONTRACTED = 55; // spacing when contracted
+const START_X = 80;
+
+let state = 'expanded'; // expanded, contracting, contracted, expanding
+let progress = 0; // 0 = expanded, 1 = contracted
+let time = 0;
+
+// ── Drawing helpers ──
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+function getTieSpacing() {
+  return lerp(HINGE_UNIT_EXPANDED, HINGE_UNIT_CONTRACTED, progress);
+}
+
+function drawBackground() {
+  ctx.fillStyle = '#fafbfc';
+  ctx.fillRect(0, 0, W, H);
+
+  // Title area
+  ctx.fillStyle = '#334155';
+  ctx.font = 'bold 13px system-ui';
+  ctx.textAlign = 'left';
+  ctx.fillText('Train Track Design — Hinge Rails', 20, 28);
+
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '11px system-ui';
+  ctx.fillText('Two antiparallel rails (hinge proteins) + ties (C₂ interfaces)', 20, 46);
+}
+
+function drawLabels() {
+  const sp = getTieSpacing();
+  const totalW = (NUM_TIES - 1) * sp;
+  const midX = START_X + totalW / 2;
+
+  // Rail labels
+  ctx.fillStyle = '#1e40af';
+  ctx.font = '11px system-ui';
+  ctx.textAlign = 'right';
+  ctx.fillText('Rail (hinge)', START_X - 16, RAIL_Y_TOP + RAIL_H / 2 + 4);
+  ctx.fillText('Rail (hinge)', START_X - 16, RAIL_Y_BOT + RAIL_H / 2 + 4);
+
+  // Tie label
+  ctx.fillStyle = '#b91c1c';
+  ctx.font = '10px system-ui';
+  ctx.textAlign = 'center';
+  const firstTieX = START_X;
+  ctx.fillText('Tie', firstTieX, (RAIL_Y_TOP + RAIL_Y_BOT + RAIL_H) / 2 + 4);
+
+  // Length dimension
+  const dimY = RAIL_Y_BOT + RAIL_H + 45;
+  const x0 = START_X;
+  const x1 = START_X + totalW;
+
+  ctx.strokeStyle = '#64748b';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 3]);
+  // vertical lines
+  ctx.beginPath();
+  ctx.moveTo(x0, RAIL_Y_BOT + RAIL_H + 10); ctx.lineTo(x0, dimY + 5);
+  ctx.moveTo(x1, RAIL_Y_BOT + RAIL_H + 10); ctx.lineTo(x1, dimY + 5);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  // horizontal arrow
+  ctx.beginPath();
+  ctx.moveTo(x0, dimY); ctx.lineTo(x1, dimY);
+  ctx.stroke();
+  // arrowheads
+  ctx.fillStyle = '#64748b';
+  ctx.beginPath(); ctx.moveTo(x0, dimY); ctx.lineTo(x0+6, dimY-3); ctx.lineTo(x0+6, dimY+3); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(x1, dimY); ctx.lineTo(x1-6, dimY-3); ctx.lineTo(x1-6, dimY+3); ctx.fill();
+
+  const pct = Math.round((1 - progress) * 100);
+  ctx.fillStyle = '#334155';
+  ctx.font = 'bold 12px system-ui';
+  ctx.textAlign = 'center';
+  ctx.fillText(`Total length: ${pct}%`, (x0 + x1) / 2, dimY - 8);
+
+  // State indicator
+  const stateX = W - 30;
+  const stateY = 35;
+  ctx.textAlign = 'right';
+  ctx.font = 'bold 13px system-ui';
+  if (progress < 0.5) {
+    ctx.fillStyle = '#2563eb';
+    ctx.fillText('EXPANDED', stateX, stateY);
+  } else {
+    ctx.fillStyle = '#7c3aed';
+    ctx.fillText('CONTRACTED', stateX, stateY);
+  }
+}
+
+function drawHingeUnit(x1, x2, y, isTop) {
+  // Draw one rail segment between two tie positions
+  const segW = x2 - x1;
+  const midX = (x1 + x2) / 2;
+
+  // Rail color interpolates between blue (closed) and purple (open)
+  const r = Math.round(lerp(37, 124, progress));
+  const g = Math.round(lerp(99, 58, progress));
+  const b = Math.round(lerp(235, 237, progress));
+  const railColor = `rgb(${r},${g},${b})`;
+
+  // Main rail bar
+  ctx.fillStyle = railColor;
+  const barH = RAIL_H;
+  ctx.beginPath();
+  roundRect(ctx, x1 + 2, y, segW - 4, barH, 4);
+  ctx.fill();
+
+  // Hinge detail: two halves with gap showing contraction
+  const gapW = lerp(2, segW * 0.3, progress);
+  const halfW = (segW - 4 - gapW) / 2;
+
+  if (halfW > 8) {
+    // Left half (darker)
+    ctx.fillStyle = `rgba(0,0,0,0.15)`;
+    ctx.beginPath();
+    roundRect(ctx, x1 + 2, y, halfW, barH, 4);
+    ctx.fill();
+
+    // Right half (darker)
+    ctx.fillStyle = `rgba(0,0,0,0.1)`;
+    ctx.beginPath();
+    roundRect(ctx, x1 + 2 + halfW + gapW, y, halfW, barH, 4);
+    ctx.fill();
+  }
+
+  // Azobenzene chevron at hinge pivot point
+  const chevX = midX;
+  const chevY = y + barH / 2;
+  const chevSize = lerp(6, 4, progress);
+  const chevDir = isTop ? -1 : 1;
+
+  ctx.strokeStyle = '#dc2626';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(chevX - chevSize, chevY - chevSize * chevDir);
+  ctx.lineTo(chevX, chevY + chevSize * chevDir * 0.5);
+  ctx.lineTo(chevX + chevSize, chevY - chevSize * chevDir);
+  ctx.stroke();
+
+  // Border
+  ctx.strokeStyle = `rgba(${r * 0.7 | 0},${g * 0.7 | 0},${b * 0.7 | 0},0.6)`;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  roundRect(ctx, x1 + 2, y, segW - 4, barH, 4);
+  ctx.stroke();
+}
+
+function drawTie(x, yTop, yBot) {
+  const tieH = yBot - yTop;
+
+  // Main tie bar
+  ctx.fillStyle = '#ef4444';
+  ctx.beginPath();
+  roundRect(ctx, x - TIE_W / 2, yTop, TIE_W, tieH + RAIL_H, 3);
+  ctx.fill();
+
+  ctx.strokeStyle = '#dc2626';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  roundRect(ctx, x - TIE_W / 2, yTop, TIE_W, tieH + RAIL_H, 3);
+  ctx.stroke();
+
+  // C2 symmetry indicator (small diamond)
+  const midY = (yTop + yBot + RAIL_H) / 2;
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.moveTo(x, midY - 5);
+  ctx.lineTo(x + 4, midY);
+  ctx.lineTo(x, midY + 5);
+  ctx.lineTo(x - 4, midY);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#dc2626';
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+}
+
+function drawAntiparallelArrows() {
+  const sp = getTieSpacing();
+  const totalW = (NUM_TIES - 1) * sp;
+  const x0 = START_X;
+  const x1 = START_X + totalW;
+
+  // Top rail: arrow pointing right (N→C)
+  const arrowY_top = RAIL_Y_TOP - 16;
+  ctx.strokeStyle = '#3b82f6';
+  ctx.lineWidth = 1.5;
+  ctx.fillStyle = '#3b82f6';
+  ctx.beginPath();
+  ctx.moveTo(x0, arrowY_top); ctx.lineTo(x1 - 5, arrowY_top);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x1, arrowY_top); ctx.lineTo(x1 - 8, arrowY_top - 4); ctx.lineTo(x1 - 8, arrowY_top + 4);
+  ctx.fill();
+  ctx.font = '10px system-ui';
+  ctx.textAlign = 'left';
+  ctx.fillText('N', x0 - 2, arrowY_top - 6);
+  ctx.textAlign = 'right';
+  ctx.fillText('C', x1 + 2, arrowY_top - 6);
+
+  // Bottom rail: arrow pointing left (C←N) — antiparallel
+  const arrowY_bot = RAIL_Y_BOT + RAIL_H + 16;
+  ctx.strokeStyle = '#3b82f6';
+  ctx.beginPath();
+  ctx.moveTo(x1, arrowY_bot); ctx.lineTo(x0 + 5, arrowY_bot);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x0, arrowY_bot); ctx.lineTo(x0 + 8, arrowY_bot - 4); ctx.lineTo(x0 + 8, arrowY_bot + 4);
+  ctx.fill();
+  ctx.font = '10px system-ui';
+  ctx.textAlign = 'right';
+  ctx.fillText('N', x1 + 2, arrowY_bot - 6);
+  ctx.textAlign = 'left';
+  ctx.fillText('C', x0 - 2, arrowY_bot - 6);
+
+  // "Antiparallel" label
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '10px system-ui';
+  ctx.textAlign = 'center';
+  ctx.fillText('antiparallel', (x0 + x1) / 2, RAIL_Y_TOP - 30);
+}
+
+function drawUVlight() {
+  if (state === 'contracting' || state === 'contracted') {
+    for (let i = 0; i < 25; i++) {
+      const x = 10 + i * 37;
+      const alpha = 0.1 + 0.05 * Math.sin(time * 4 + i);
+      ctx.strokeStyle = `rgba(168,85,247,${alpha})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x, 60); ctx.lineTo(x + 2, 80);
+      ctx.stroke();
+    }
+  }
+  if (state === 'expanding') {
+    for (let i = 0; i < 25; i++) {
+      const x = 10 + i * 37;
+      const alpha = 0.08 + 0.04 * Math.sin(time * 4 + i);
+      ctx.strokeStyle = `rgba(59,130,246,${alpha})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x, 60); ctx.lineTo(x + 2, 80);
+      ctx.stroke();
+    }
+  }
+}
+
+function drawContractExpand() {
+  // Small arrows between ties showing compression/expansion
+  if (state === 'expanded' || Math.abs(progress - 0) < 0.05) return;
+
+  const sp = getTieSpacing();
+  const alpha = Math.min(0.6, progress);
+
+  for (let i = 0; i < NUM_TIES - 1; i++) {
+    const x1 = START_X + i * sp + sp * 0.3;
+    const x2 = START_X + (i + 1) * sp - sp * 0.3;
+    const midY = (RAIL_Y_TOP + RAIL_Y_BOT + RAIL_H) / 2;
+
+    // Inward arrows (compression)
+    ctx.strokeStyle = `rgba(124,58,237,${alpha})`;
+    ctx.fillStyle = `rgba(124,58,237,${alpha})`;
+    ctx.lineWidth = 1.2;
+
+    // Right-pointing arrow from left
+    ctx.beginPath();
+    ctx.moveTo(x1, midY); ctx.lineTo(x1 + 10, midY);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x1 + 10, midY); ctx.lineTo(x1 + 6, midY - 3); ctx.lineTo(x1 + 6, midY + 3);
+    ctx.fill();
+
+    // Left-pointing arrow from right
+    ctx.beginPath();
+    ctx.moveTo(x2, midY); ctx.lineTo(x2 - 10, midY);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x2 - 10, midY); ctx.lineTo(x2 - 6, midY - 3); ctx.lineTo(x2 - 6, midY + 3);
+    ctx.fill();
+  }
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  drawBackground();
+  drawUVlight();
+
+  const sp = getTieSpacing();
+
+  drawAntiparallelArrows();
+
+  // Draw rail segments between ties
+  for (let i = 0; i < NUM_TIES - 1; i++) {
+    const tx1 = START_X + i * sp;
+    const tx2 = START_X + (i + 1) * sp;
+    drawHingeUnit(tx1, tx2, RAIL_Y_TOP, true);
+    drawHingeUnit(tx1, tx2, RAIL_Y_BOT, false);
+  }
+
+  // Draw rail extensions beyond first and last tie
+  const ext = 35;
+  const firstX = START_X;
+  const lastX = START_X + (NUM_TIES - 1) * sp;
+
+  // Left extensions
+  const r1 = Math.round(lerp(37, 124, progress));
+  const g1 = Math.round(lerp(99, 58, progress));
+  const b1 = Math.round(lerp(235, 237, progress));
+  ctx.fillStyle = `rgb(${r1},${g1},${b1})`;
+  ctx.beginPath(); roundRect(ctx, firstX - ext, RAIL_Y_TOP, ext, RAIL_H, 4); ctx.fill();
+  ctx.beginPath(); roundRect(ctx, firstX - ext, RAIL_Y_BOT, ext, RAIL_H, 4); ctx.fill();
+  // Right extensions
+  ctx.beginPath(); roundRect(ctx, lastX, RAIL_Y_TOP, ext, RAIL_H, 4); ctx.fill();
+  ctx.beginPath(); roundRect(ctx, lastX, RAIL_Y_BOT, ext, RAIL_H, 4); ctx.fill();
+
+  // Dotted continuation
+  ctx.fillStyle = `rgb(${r1},${g1},${b1})`;
+  for (let d = 0; d < 3; d++) {
+    ctx.beginPath();
+    ctx.arc(firstX - ext - 10 - d * 8, RAIL_Y_TOP + RAIL_H/2, 2, 0, Math.PI*2);
+    ctx.arc(firstX - ext - 10 - d * 8, RAIL_Y_BOT + RAIL_H/2, 2, 0, Math.PI*2);
+    ctx.arc(lastX + ext + 10 + d * 8, RAIL_Y_TOP + RAIL_H/2, 2, 0, Math.PI*2);
+    ctx.arc(lastX + ext + 10 + d * 8, RAIL_Y_BOT + RAIL_H/2, 2, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // Draw ties
+  for (let i = 0; i < NUM_TIES; i++) {
+    const tx = START_X + i * sp;
+    drawTie(tx, RAIL_Y_TOP, RAIL_Y_BOT);
+  }
+
+  drawContractExpand();
+  drawLabels();
+
+  // Mechanism box
+  drawMechanismBox();
+}
+
+function drawMechanismBox() {
+  const bx = W - 260, by = 60, bw = 240, bh = 60;
+  ctx.fillStyle = '#f8fafc';
+  ctx.strokeStyle = '#e2e8f0';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); roundRect(ctx, bx, by, bw, bh, 6); ctx.fill();
+  ctx.beginPath(); roundRect(ctx, bx, by, bw, bh, 6); ctx.stroke();
+
+  ctx.fillStyle = '#475569';
+  ctx.font = '10px system-ui';
+  ctx.textAlign = 'left';
+
+  if (progress < 0.3) {
+    ctx.fillText('Hinge closed (trans-azobenzene)', bx + 10, by + 20);
+    ctx.fillText('→ Rails at full length', bx + 10, by + 36);
+    ctx.fillText('→ Ties at maximum spacing', bx + 10, by + 52);
+  } else {
+    ctx.fillStyle = '#6d28d9';
+    ctx.fillText('Hinge open (cis-azobenzene)', bx + 10, by + 20);
+    ctx.fillText('→ Rails contract', bx + 10, by + 36);
+    ctx.fillText('→ Ties pulled closer together', bx + 10, by + 52);
+  }
+}
+
+// ── Animation ──
+let lastTime = 0;
+function frame(ts) {
+  const dt = Math.min((ts - lastTime) / 1000, 0.05);
+  lastTime = ts;
+  time += dt;
+
+  if (state === 'contracting') {
+    progress = Math.min(1, progress + dt * 1.2);
+    if (progress >= 1) state = 'contracted';
+  } else if (state === 'expanding') {
+    progress = Math.max(0, progress - dt * 1.2);
+    if (progress <= 0) { state = 'expanded'; document.getElementById('btn-uv').disabled = false; }
+  }
+
+  draw();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// ── Controls ──
+function startUV() {
+  state = 'contracting';
+  document.getElementById('btn-uv').disabled = true;
+  document.getElementById('btn-bl').disabled = false;
+  document.getElementById('pill').className = 'pill uv';
+  document.getElementById('pill').textContent = 'UV — Contracting';
+}
+function startBlue() {
+  state = 'expanding';
+  document.getElementById('btn-bl').disabled = true;
+  document.getElementById('pill').className = 'pill bl';
+  document.getElementById('pill').textContent = 'Blue — Expanding';
+}
+function resetAll() {
+  state = 'expanded';
+  progress = 0;
+  document.getElementById('btn-uv').disabled = false;
+  document.getElementById('btn-bl').disabled = true;
+  document.getElementById('pill').className = 'pill';
+  document.getElementById('pill').textContent = 'Expanded (rest state)';
+}
+</script>
+</body>
+</html>
