@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Train Track Hinge — 1D Contraction/Expansion</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0B0F14;color:#E0E0E0;font-family:'Segoe UI',sans-serif;display:flex;flex-direction:column;align-items:center;height:100vh;overflow:hidden}
+h1{margin-top:14px;font-size:18px;font-weight:600}
+.sub{font-size:10px;color:#7F8C8D;margin-top:2px}
+canvas{margin-top:8px}
+.row{display:flex;gap:10px;align-items:center;margin-top:10px;font-size:11px}
+.btn{padding:5px 16px;border:1px solid #444;background:none;color:#aaa;border-radius:4px;cursor:pointer;font-size:11px;transition:all 0.2s;font-weight:600}
+.btn:hover{border-color:#E74C3C;color:#E74C3C}
+.btn.on{background:#E74C3C;color:#fff;border-color:#E74C3C}
+.btn-uv{border-color:#7C3AED;color:#7C3AED}
+.btn-uv:hover,.btn-uv.on{background:#7C3AED;color:#fff;border-color:#7C3AED}
+.btn-blue{border-color:#3B82F6;color:#3B82F6}
+.btn-blue:hover,.btn-blue.on{background:#3B82F6;color:#fff;border-color:#3B82F6}
+</style>
+</head>
+<body>
+<h1>Train Track — Hinge Rail Design</h1>
+<p class="sub">THR rail → light-driven hinge protein | 1D contraction / expansion</p>
+<canvas id="c"></canvas>
+<div class="row">
+  <button class="btn btn-uv" onclick="targetBend=1;autoMode=false">UV (365nm) Contract</button>
+  <button class="btn" onclick="autoMode=true" id="autoBtn">Auto Cycle</button>
+  <button class="btn btn-blue" onclick="targetBend=0;autoMode=false">Blue (450nm) Expand</button>
+</div>
+<script>
+const C = document.getElementById('c'), X = C.getContext('2d');
+let W, H;
+function resize() { W = C.width = Math.min(window.innerWidth - 20, 1100); H = C.height = Math.min(window.innerHeight - 120, 500); }
+resize(); window.addEventListener('resize', resize);
+
+let bend = 0, targetBend = 0, autoMode = true, autoTime = 0, pulse = 0;
+
+const NUM_TIES = 6;
+const MAX_BEND = 0.65;
+
+// ─── Strut drawing (matching hinge_single_cell style) ───
+function drawStrut(x1, y1, x2, y2, w) {
+  const dx = x2-x1, dy = y2-y1, len = Math.sqrt(dx*dx+dy*dy);
+  if (len < 1) return;
+  const ang = Math.atan2(dy, dx);
+  X.save();
+  X.translate((x1+x2)/2, (y1+y2)/2);
+  X.rotate(ang);
+  const hl = len/2, hw = w/2, d = 3;
+  // Top face (3D effect)
+  X.fillStyle = '#2471A3';
+  X.beginPath();
+  X.moveTo(-hl,-hw); X.lineTo(-hl+d,-hw-d); X.lineTo(hl+d,-hw-d); X.lineTo(hl,-hw);
+  X.closePath(); X.fill();
+  // Right face
+  X.fillStyle = '#1A5276';
+  X.beginPath();
+  X.moveTo(hl,-hw); X.lineTo(hl+d,-hw-d); X.lineTo(hl+d,hw-d); X.lineTo(hl,hw);
+  X.closePath(); X.fill();
+  // Front face with gradient
+  const g = X.createLinearGradient(0,-hw,0,hw);
+  g.addColorStop(0,'#3498DB'); g.addColorStop(0.5,'#2E86C1'); g.addColorStop(1,'#2471A3');
+  X.fillStyle = g;
+  X.fillRect(-hl,-hw,len,w);
+  X.strokeStyle = '#1A5276'; X.lineWidth = 0.7;
+  X.strokeRect(-hl,-hw,len,w);
+  // Internal repeat marks
+  X.strokeStyle = 'rgba(255,255,255,0.15)'; X.lineWidth = 0.5;
+  const seg = Math.max(2, Math.round(len/14));
+  for (let i = 1; i < seg; i++) {
+    const sx = -hl + (len/seg)*i;
+    X.beginPath(); X.moveTo(sx,-hw+1); X.lineTo(sx,hw-1); X.stroke();
+  }
+  X.restore();
+}
+
+// ─── Hinge joint (red glowing dot) ───
+function drawHinge(x, y, active) {
+  if (active) {
+    const gr = X.createRadialGradient(x,y,3,x,y,16+Math.sin(pulse)*3);
+    gr.addColorStop(0,'rgba(231,76,60,0.5)');
+    gr.addColorStop(1,'rgba(231,76,60,0)');
+    X.fillStyle = gr;
+    X.beginPath(); X.arc(x,y,18,0,Math.PI*2); X.fill();
+  }
+  X.fillStyle = active ? '#E74C3C' : '#922B21';
+  X.beginPath(); X.arc(x,y,6,0,Math.PI*2); X.fill();
+  X.fillStyle = active ? '#F5B7B1' : '#D98880';
+  X.beginPath(); X.arc(x,y,2.5,0,Math.PI*2); X.fill();
+}
+
+// ─── Corner/tie joint (blue dot) ───
+function drawCorner(x, y) {
+  X.fillStyle = '#1B4F72';
+  X.beginPath(); X.arc(x,y,7,0,Math.PI*2); X.fill();
+  X.fillStyle = '#2E86C1';
+  X.beginPath(); X.arc(x,y,3.5,0,Math.PI*2); X.fill();
+}
+
+// ─── Main draw loop ───
+function draw() {
+  X.clearRect(0, 0, W, H);
+  pulse += 0.06;
+
+  // Smooth animation
+  bend += (targetBend - bend) * 0.035;
+  if (autoMode) {
+    autoTime += 0.008;
+    targetBend = 0.5 + 0.5 * Math.sin(autoTime);
+  }
+
+  const curvature = bend * MAX_BEND;
+  const RAIL_GAP = Math.min(H * 0.16, 60);
+  const baseSpacing = Math.min(W * 0.13, 145);
+  const spacingFactor = 1 - curvature * 0.55;
+  const spacing = baseSpacing * spacingFactor;
+  const sw = 12; // strut width
+
+  const totalWidth = spacing * (NUM_TIES - 1);
+  const startX = (W - totalWidth) / 2;
+  const centerY = H * 0.48;
+
+  const tiePositions = [];
+  for (let i = 0; i < NUM_TIES; i++) {
+    tiePositions.push(startX + i * spacing);
+  }
+
+  // ── Draw ghost lines for original (expanded) positions ──
+  const origSpacing = baseSpacing;
+  const origTotalW = origSpacing * (NUM_TIES - 1);
+  const origStartX = (W - origTotalW) / 2;
+  if (bend > 0.05) {
+    X.strokeStyle = 'rgba(255,255,255,0.04)'; X.lineWidth = 1;
+    X.setLineDash([4, 4]);
+    for (let rail = 0; rail < 2; rail++) {
+      const ry = centerY + (rail === 0 ? -1 : 1) * RAIL_GAP;
+      X.beginPath();
+      X.moveTo(origStartX - 20, ry);
+      X.lineTo(origStartX + origTotalW + 20, ry);
+      X.stroke();
+    }
+    X.setLineDash([]);
+  }
+
+  // ── Draw two rails (top and bottom) ──
+  for (let rail = 0; rail < 2; rail++) {
+    const sign = rail === 0 ? -1 : 1;
+    const railY = centerY + sign * RAIL_GAP;
+
+    for (let i = 0; i < NUM_TIES - 1; i++) {
+      const x1 = tiePositions[i];
+      const x2 = tiePositions[i + 1];
+      const midX = (x1 + x2) / 2;
+
+      // Bend outward (away from center)
+      const bendDir = sign;
+      const cpY = railY + bendDir * curvature * baseSpacing * 1.0;
+
+      // Hinge point at the peak of the curve
+      const hx = midX;
+      const hy = railY + (cpY - railY) * 0.5;
+
+      // Draw two half-struts from tie to hinge
+      drawStrut(x1, railY, hx, hy, sw);
+      drawStrut(hx, hy, x2, railY, sw);
+
+      // Hinge joint at midpoint
+      const isActive = bend > 0.05;
+      drawHinge(hx, hy, isActive);
+    }
+
+    // Dashed extensions at both ends
+    X.strokeStyle = 'rgba(52,152,219,0.3)'; X.lineWidth = sw * 0.5;
+    X.setLineDash([6, 4]); X.lineCap = 'round';
+    X.beginPath();
+    X.moveTo(tiePositions[0], railY);
+    X.lineTo(tiePositions[0] - 30, railY);
+    X.stroke();
+    X.beginPath();
+    X.moveTo(tiePositions[NUM_TIES-1], railY);
+    X.lineTo(tiePositions[NUM_TIES-1] + 30, railY);
+    X.stroke();
+    X.setLineDash([]); X.lineCap = 'butt';
+  }
+
+  // ── Draw ties (vertical struts connecting rails) ──
+  const topY = centerY - RAIL_GAP;
+  const botY = centerY + RAIL_GAP;
+  for (let i = 0; i < NUM_TIES; i++) {
+    const tx = tiePositions[i];
+    drawStrut(tx, topY, tx, botY, sw * 0.75);
+  }
+
+  // ── Draw corner joints at tie-rail intersections ──
+  for (let i = 0; i < NUM_TIES; i++) {
+    drawCorner(tiePositions[i], topY);
+    drawCorner(tiePositions[i], botY);
+  }
+
+  // ── Light indicator ──
+  const lx = W / 2, ly = centerY - RAIL_GAP - 55;
+  const uvIntensity = bend;
+  const blueIntensity = 1 - bend;
+
+  // UV glow (purple) when contracting
+  if (uvIntensity > 0.1) {
+    const gr = X.createRadialGradient(lx, ly, 5, lx, ly, 30 + uvIntensity * 15);
+    gr.addColorStop(0, `rgba(124,58,237,${uvIntensity * 0.6})`);
+    gr.addColorStop(1, 'rgba(124,58,237,0)');
+    X.fillStyle = gr;
+    X.beginPath(); X.arc(lx, ly, 45, 0, Math.PI*2); X.fill();
+  }
+  // Blue glow when expanding
+  if (blueIntensity > 0.1) {
+    const gr = X.createRadialGradient(lx, ly, 5, lx, ly, 30 + blueIntensity * 15);
+    gr.addColorStop(0, `rgba(59,130,246,${blueIntensity * 0.6})`);
+    gr.addColorStop(1, 'rgba(59,130,246,0)');
+    X.fillStyle = gr;
+    X.beginPath(); X.arc(lx, ly, 45, 0, Math.PI*2); X.fill();
+  }
+
+  // Light source icon
+  const lightColor = bend > 0.5 ? '#7C3AED' : '#3B82F6';
+  X.beginPath(); X.arc(lx, ly, 10, 0, Math.PI*2);
+  X.fillStyle = lightColor; X.globalAlpha = 0.9; X.fill(); X.globalAlpha = 1;
+
+  // Rays
+  for (let a = 0; a < 8; a++) {
+    const angle = (a/8) * Math.PI * 2 + pulse * 0.3;
+    X.beginPath();
+    X.moveTo(lx + Math.cos(angle)*14, ly + Math.sin(angle)*14);
+    X.lineTo(lx + Math.cos(angle)*20, ly + Math.sin(angle)*20);
+    X.strokeStyle = lightColor; X.lineWidth = 1.5; X.globalAlpha = 0.4; X.stroke();
+    X.globalAlpha = 1;
+  }
+
+  // Light label
+  const lightText = bend > 0.5 ? 'UV 365nm' : 'Blue 450nm';
+  X.fillStyle = lightColor; X.font = '11px Segoe UI'; X.textAlign = 'center';
+  X.fillText(lightText, lx, ly - 18);
+
+  // Down arrows from light
+  X.beginPath(); X.setLineDash([3,3]);
+  X.moveTo(lx, ly + 12); X.lineTo(lx, topY - 12);
+  X.strokeStyle = lightColor + '40'; X.lineWidth = 1; X.stroke();
+  X.setLineDash([]);
+
+  // ── Angle and state ──
+  const deg = (bend * MAX_BEND * 180 / Math.PI * 2.5).toFixed(0);
+  X.fillStyle = '#F1C40F'; X.font = '10px Segoe UI'; X.textAlign = 'right';
+  if (bend > 0.03) X.fillText('\u03B8 = ' + deg + '\u00B0', W - 14, H - 10);
+
+  X.fillStyle = bend > 0.5 ? '#7C3AED' : '#3B82F6';
+  X.font = 'bold 12px Segoe UI'; X.textAlign = 'left';
+  X.fillText(bend > 0.5 ? 'Contracting' : 'Expanded', 14, H - 10);
+
+  requestAnimationFrame(draw);
+}
+
+draw();
+</script>
+</body>
+</html>
