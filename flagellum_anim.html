@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Flagellum: Sliding vs Bending</title>
+<style>
+  body { margin: 0; background: #fff; display: flex; justify-content: center; align-items: center; height: 100vh; }
+  .label { font-family: 'Arial', sans-serif; font-weight: bold; }
+</style>
+</head>
+<body>
+<svg id="scene" width="960" height="520" viewBox="0 0 960 520">
+  <defs>
+    <linearGradient id="mtGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#1B8C1B"/>
+      <stop offset="40%" stop-color="#4BC94B"/>
+      <stop offset="100%" stop-color="#1B8C1B"/>
+    </linearGradient>
+    <linearGradient id="mtGrad2" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#0E6B0E"/>
+      <stop offset="40%" stop-color="#3AAF3A"/>
+      <stop offset="100%" stop-color="#0E6B0E"/>
+    </linearGradient>
+  </defs>
+
+  <text x="240" y="32" text-anchor="middle" class="label" font-size="18" fill="#222">(A) Sliding</text>
+  <text x="720" y="32" text-anchor="middle" class="label" font-size="18" fill="#222">(B) Bending</text>
+
+  <g id="sceneA" transform="translate(240, 260)"></g>
+  <g id="sceneB" transform="translate(720, 260)"></g>
+
+  <line x1="480" y1="20" x2="480" y2="500" stroke="#ccc" stroke-width="1" stroke-dasharray="6,4"/>
+
+  <g id="atpLabelA" opacity="0">
+    <rect x="185" y="465" width="110" height="32" rx="6" fill="#FEF3C7" stroke="#F59E0B" stroke-width="1.5"/>
+    <text x="240" y="486" text-anchor="middle" class="label" font-size="14" fill="#B45309">+ ATP → SLIDE</text>
+  </g>
+  <g id="atpLabelB" opacity="0">
+    <rect x="665" y="465" width="110" height="32" rx="6" fill="#FEF3C7" stroke="#F59E0B" stroke-width="1.5"/>
+    <text x="720" y="486" text-anchor="middle" class="label" font-size="14" fill="#B45309">+ ATP → BEND</text>
+  </g>
+</svg>
+
+<script>
+const NS = "http://www.w3.org/2000/svg";
+
+const MT_W = 28;
+const MT_H = 340;
+const GAP = 56;
+const DYNEIN_ROWS = 8;
+const DYNEIN_SP = 36;
+const LINK_ROWS = 6;
+const SLIDE_DIST = 60;
+const ANIM_DUR = 2800;
+
+// Dynein power stroke: arm swings from - end (down) toward + end (up)
+// Pre-stroke: tilted toward - (downward), Post-stroke: tilted toward + (upward)
+const ARM_LEN = 18;
+const PRE_ANGLE = -40;   // pre-stroke: pointing toward minus end (down)
+const POST_ANGLE = 40;   // post-stroke: pointing toward plus end (up)
+
+function createEl(tag, attrs, parent) {
+  const el = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  if (parent) parent.appendChild(el);
+  return el;
+}
+
+function drawMT(parent, cx, topY, h, gradId, id) {
+  const g = createEl("g", { id }, parent);
+  createEl("rect", {
+    x: cx - MT_W/2, y: topY, width: MT_W, height: h,
+    rx: MT_W/2, ry: MT_W/2, fill: `url(#${gradId})`, stroke: "#0A5C0A", "stroke-width": 1.2
+  }, g);
+  createEl("text", {
+    x: cx, y: topY + 16, "text-anchor": "middle",
+    "font-family": "Arial", "font-size": "14", "font-weight": "bold", fill: "#fff"
+  }, g).textContent = "+";
+  createEl("text", {
+    x: cx, y: topY + h - 8, "text-anchor": "middle",
+    "font-family": "Arial", "font-size": "14", "font-weight": "bold", fill: "#fff"
+  }, g).textContent = "−";
+  return g;
+}
+
+function drawDyneinArm(parent, baseX, baseY, headTargetX, headTargetY, strokeFrac) {
+  const deg = PRE_ANGLE + (POST_ANGLE - PRE_ANGLE) * strokeFrac;
+  const rad = deg * Math.PI / 180;
+
+  const stalkEndX = baseX + (headTargetX - baseX) * 0.45;
+  const stalkEndY = baseY;
+
+  const armEndX = stalkEndX + ARM_LEN * Math.cos(rad + Math.PI * 0.05);
+  const armEndY = stalkEndY - ARM_LEN * Math.sin(rad);
+
+  // Stalk
+  createEl("line", {
+    x1: baseX, y1: baseY, x2: stalkEndX, y2: stalkEndY,
+    stroke: "#D32F2F", "stroke-width": 2.5, "stroke-linecap": "round"
+  }, parent);
+
+  // Angled arm
+  createEl("line", {
+    x1: stalkEndX, y1: stalkEndY, x2: armEndX, y2: armEndY,
+    stroke: "#D32F2F", "stroke-width": 2.8, "stroke-linecap": "round"
+  }, parent);
+
+  // Thin connector to right MT
+  createEl("line", {
+    x1: armEndX, y1: armEndY, x2: headTargetX, y2: headTargetY,
+    stroke: "#D32F2F", "stroke-width": 1.5, "stroke-linecap": "round", opacity: 0.6
+  }, parent);
+
+  // Globular head
+  createEl("circle", {
+    cx: armEndX, cy: armEndY, r: 5,
+    fill: "#E53935", stroke: "#B71C1C", "stroke-width": 0.8
+  }, parent);
+
+  // Base attachment
+  createEl("circle", { cx: baseX, cy: baseY, r: 3.5, fill: "#C62828" }, parent);
+}
+
+/* ──── SCENE A (Sliding) ──── */
+const gA = document.getElementById("sceneA");
+const aTopY = -MT_H / 2;
+const aLeftCX = -GAP / 2;
+const aRightCX = GAP / 2;
+
+drawMT(gA, aLeftCX, aTopY, MT_H, "mtGrad", "a-mt-left");
+const aRightMT = drawMT(gA, aRightCX, aTopY, MT_H, "mtGrad2", "a-mt-right");
+const aDyneins = createEl("g", { id: "a-dyneins" }, gA);
+
+function drawSceneADyneins(slideFrac, strokeFrac) {
+  while (aDyneins.firstChild) aDyneins.removeChild(aDyneins.firstChild);
+  const dy = -slideFrac * SLIDE_DIST;
+  aRightMT.setAttribute("transform", `translate(0, ${dy})`);
+
+  for (let i = 0; i < DYNEIN_ROWS; i++) {
+    const yBase = aTopY + 30 + i * DYNEIN_SP;
+    const yHead = yBase + dy;
+    // All arms move together (uniform strokeFrac)
+    drawDyneinArm(aDyneins,
+      aLeftCX + MT_W/2, yBase,
+      aRightCX - MT_W/2, yHead,
+      strokeFrac
+    );
+  }
+}
+drawSceneADyneins(0, 0);
+
+/* ──── SCENE B (Bending) ──── */
+const gB = document.getElementById("sceneB");
+const bLeftCX = -GAP / 2;
+const bRightCX = GAP / 2;
+const bContainer = createEl("g", { id: "b-container" }, gB);
+
+function drawSceneB(bendFrac, strokeFrac) {
+  while (bContainer.firstChild) bContainer.removeChild(bContainer.firstChild);
+
+  const n = 40;
+  const halfH = MT_H / 2;
+  const bendX = bendFrac * -55;
+
+  function getBendOffset(t) { return bendX * t * t; }
+
+  function mtPath(cx) {
+    let d = "";
+    for (let i = 0; i <= n; i++) {
+      const t = i / n;
+      const y = halfH - t * MT_H;
+      const x = cx + getBendOffset(t);
+      d += (i === 0 ? "M" : "L") + x.toFixed(1) + "," + y.toFixed(1);
+    }
+    return d;
+  }
+
+  // Outlines
+  createEl("path", {
+    d: mtPath(bLeftCX), fill: "none", stroke: "#0A5C0A", "stroke-width": MT_W + 2.4,
+    "stroke-linecap": "round", "stroke-linejoin": "round", opacity: 0.3
+  }, bContainer);
+  createEl("path", {
+    d: mtPath(bRightCX), fill: "none", stroke: "#0A5C0A", "stroke-width": MT_W + 2.4,
+    "stroke-linecap": "round", "stroke-linejoin": "round", opacity: 0.3
+  }, bContainer);
+
+  // MTs
+  createEl("path", {
+    d: mtPath(bLeftCX), fill: "none", stroke: "url(#mtGrad)", "stroke-width": MT_W,
+    "stroke-linecap": "round", "stroke-linejoin": "round"
+  }, bContainer);
+  createEl("path", {
+    d: mtPath(bRightCX), fill: "none", stroke: "url(#mtGrad2)", "stroke-width": MT_W,
+    "stroke-linecap": "round", "stroke-linejoin": "round"
+  }, bContainer);
+
+  // Linking proteins
+  for (let i = 0; i < LINK_ROWS; i++) {
+    const t = 1 - (0.1 + i * (0.8 / (LINK_ROWS - 1)));
+    const y = halfH - t * MT_H;
+    const off = getBendOffset(t);
+    createEl("line", {
+      x1: bLeftCX + MT_W/2 + off, y1: y + 10,
+      x2: bRightCX - MT_W/2 + off, y2: y - 10,
+      stroke: "#1E88E5", "stroke-width": 3, "stroke-linecap": "round"
+    }, bContainer);
+  }
+
+  // Dynein arms – all uniform
+  for (let i = 0; i < DYNEIN_ROWS; i++) {
+    const t = 1 - (0.08 + i * (0.8 / (DYNEIN_ROWS - 1)));
+    const y = halfH - t * MT_H;
+    const off = getBendOffset(t);
+
+    drawDyneinArm(bContainer,
+      bLeftCX + MT_W/2 + off, y,
+      bRightCX - MT_W/2 + off, y,
+      strokeFrac
+    );
+  }
+
+  // +/- labels
+  const topOff = getBendOffset(1);
+  for (const cx of [bLeftCX, bRightCX]) {
+    createEl("text", {
+      x: cx + topOff, y: -halfH + 16, "text-anchor": "middle",
+      "font-family": "Arial", "font-size": "14", "font-weight": "bold", fill: "#fff"
+    }, bContainer).textContent = "+";
+    createEl("text", {
+      x: cx, y: halfH - 8, "text-anchor": "middle",
+      "font-family": "Arial", "font-size": "14", "font-weight": "bold", fill: "#fff"
+    }, bContainer).textContent = "−";
+  }
+
+  if (bendFrac < 0.3) {
+    createEl("text", {
+      x: bRightCX + 55 + getBendOffset(0.7), y: -halfH + 80,
+      "font-family": "Arial", "font-size": "11", fill: "#1565C0", "font-weight": "bold"
+    }, bContainer).textContent = "linking proteins";
+  }
+}
+drawSceneB(0, 0);
+
+/* ──── ANIMATION (A and B simultaneous) ──── */
+function easeInOut(t) {
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+
+const phases = [
+  { name: "wait1", dur: 800 },
+  { name: "forward", dur: ANIM_DUR },   // both slide + bend together
+  { name: "hold", dur: 1200 },
+  { name: "reverse", dur: 1000 },        // both reset together
+  { name: "waitEnd", dur: 600 },
+];
+
+let phaseIdx = 0;
+let phaseStart = performance.now();
+
+function animate(now) {
+  const ph = phases[phaseIdx];
+  const elapsed = now - phaseStart;
+  const frac = Math.min(elapsed / ph.dur, 1);
+  const ef = easeInOut(frac);
+
+  switch (ph.name) {
+    case "forward":
+      drawSceneADyneins(ef, ef);
+      drawSceneB(ef, ef);
+      document.getElementById("atpLabelA").setAttribute("opacity", Math.min(frac * 3, 1));
+      document.getElementById("atpLabelB").setAttribute("opacity", Math.min(frac * 3, 1));
+      break;
+    case "reverse":
+      drawSceneADyneins(1 - ef, 1 - ef);
+      drawSceneB(1 - ef, 1 - ef);
+      document.getElementById("atpLabelA").setAttribute("opacity", 1 - ef);
+      document.getElementById("atpLabelB").setAttribute("opacity", 1 - ef);
+      break;
+  }
+
+  if (frac >= 1) {
+    phaseIdx++;
+    if (phaseIdx >= phases.length) {
+      phaseIdx = 0;
+      drawSceneADyneins(0, 0);
+      drawSceneB(0, 0);
+    }
+    phaseStart = now;
+  }
+  requestAnimationFrame(animate);
+}
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>

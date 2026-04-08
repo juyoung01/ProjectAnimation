@@ -1,0 +1,203 @@
+<style>
+body{margin:0;padding:0;background:white;font-family:system-ui,sans-serif}
+svg text{font-family:system-ui,sans-serif}
+.cr{display:flex;align-items:center;gap:10px;margin:6px 0 0 10px;flex-wrap:wrap}
+.cr button{min-width:110px;padding:6px 12px;font-size:12px;cursor:pointer;border:1px solid #ccc;border-radius:6px}
+.cr button.on-bl{background:#E6F1FB;color:#185FA5;border-color:#85B7EB}
+.cr button.on-uv{background:#F3E8FF;color:#7C3AED;border-color:#C4B5FD}
+.pl{display:inline-block;font-size:11px;padding:2px 8px;border-radius:4px;font-weight:500;background:#f0f0f0;color:#666}
+</style>
+
+<svg width="100%" viewBox="0 0 640 290">
+  <defs>
+    <linearGradient id="cyl" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#c8eac3"/>
+      <stop offset="50%" stop-color="#8dc485"/>
+      <stop offset="100%" stop-color="#6aaa5e"/>
+    </linearGradient>
+    <radialGradient id="pg">
+      <stop offset="0%" stop-color="#FFE066"/>
+      <stop offset="100%" stop-color="#F5B800"/>
+    </radialGradient>
+  </defs>
+
+  <g id="scene"></g>
+
+  <!-- Slide surface -->
+  <rect x="20" y="232" width="600" height="14" rx="3" fill="#d0d0d0" stroke="#aaa" stroke-width="0.5"/>
+  <text x="320" y="243" text-anchor="middle" font-size="10" fill="#666">Slide</text>
+</svg>
+
+<div class="cr">
+  <button id="b-bl" onclick="goBlue()">Blue (close → torque)</button>
+  <button id="b-uv" onclick="goUV()">UV (open → reset)</button>
+  <button onclick="goReset()">Reset</button>
+  <span id="pl" class="pl">Ready</span>
+</div>
+
+<script>
+const NS='http://www.w3.org/2000/svg';
+const N=6, GAP=82, X0=80;
+
+const FIL_CY=62, FIL_RY=22.5;
+const FIL_TOP=FIL_CY-FIL_RY;
+const FIL_BOT=FIL_CY+FIL_RY;
+const FIL_LEFT=30, FIL_WIDTH=520, FIL_RIGHT=FIL_LEFT+FIL_WIDTH;
+
+const SLIDE_Y=232;
+const HINGE_W=22, HINGE_H=32;
+const BASE_BOT=SLIDE_Y;
+const BASE_TOP=BASE_BOT-HINGE_H;
+const JOINT_Y=BASE_TOP-2;
+const PAB_R=8;
+
+const ORBIT_R=JOINT_Y-FIL_CY; // 136
+const ROT_PER_STEP=120;
+
+let totalRotation=0, busy=false, phase='bound';
+
+function mk(t,a){
+  const e=document.createElementNS(NS,t);
+  for(const[k,v]of Object.entries(a)) e.setAttribute(k,v);
+  return e;
+}
+
+function drawAll(angleDeg){
+  const scene=document.getElementById('scene');
+  scene.innerHTML='';
+  const rad=(angleDeg||0)*Math.PI/180;
+
+  // === Filament cylinder ===
+  scene.appendChild(mk('rect',{x:FIL_LEFT,y:FIL_TOP,width:FIL_WIDTH,height:FIL_RY*2,fill:'url(#cyl)',stroke:'#6aaa5e','stroke-width':'1'}));
+  scene.appendChild(mk('ellipse',{cx:FIL_RIGHT,cy:FIL_CY,rx:14,ry:FIL_RY,fill:'#8dc485',stroke:'#6aaa5e','stroke-width':'1'}));
+  scene.appendChild(mk('ellipse',{cx:FIL_LEFT,cy:FIL_CY,rx:14,ry:FIL_RY,fill:'url(#cyl)',stroke:'#6aaa5e','stroke-width':'1'}));
+
+  // Rotation markers
+  const nM=8, mSp=FIL_WIDTH/(nM+1);
+  for(let i=1;i<=nM;i++){
+    const mx=FIL_LEFT+i*mSp;
+    const myA=FIL_CY+FIL_RY*Math.cos(rad);
+    const depA=Math.sin(rad);
+    if(depA>0.05) scene.appendChild(mk('circle',{cx:mx,cy:myA,r:Math.max(1,3*depA),fill:'#4a8e42',opacity:0.7*depA}));
+    const myB=FIL_CY+FIL_RY*Math.cos(rad+Math.PI);
+    const depB=Math.sin(rad+Math.PI);
+    if(depB>0.05) scene.appendChild(mk('circle',{cx:mx,cy:myB,r:Math.max(1,3*depB),fill:'#4a8e42',opacity:0.7*depB}));
+  }
+
+  // === Per-hinge: base + arm (perspective) + connector + PAB ===
+  for(let i=0;i<N;i++){
+    const cx=X0+i*GAP;
+
+    // PAB orbits around filament center
+    const pabY=FIL_CY+ORBIT_R*Math.cos(rad);
+
+    // --- Hinge base: always full size, fixed ---
+    scene.appendChild(mk('rect',{x:cx-HINGE_W/2,y:BASE_TOP,width:HINGE_W,height:HINGE_H,rx:'2',fill:'#2563EB',stroke:'#1d4ed8','stroke-width':'1'}));
+    scene.appendChild(mk('line',{x1:cx,y1:BASE_BOT,x2:cx,y2:SLIDE_Y,stroke:'#333','stroke-width':'2'}));
+
+    // --- Hinge arm: perspective — small → big ---
+    // sin(rad) controls how much the arm faces us
+    // 0° → sin=0 → arm angled away → small (50%)
+    // 90° → sin=1 → arm facing us → full (100%)
+    const armScale=0.5+0.5*Math.sin(rad);
+    const armVisH=Math.max(8, HINGE_H*armScale);
+    const armY=JOINT_Y-armVisH;
+
+    scene.appendChild(mk('rect',{x:cx-HINGE_W/2,y:armY,width:HINGE_W,height:armVisH,rx:'2',fill:'#2563EB',stroke:'#1d4ed8','stroke-width':'1'}));
+
+    // --- Connector: filament surface → PAB ---
+    const filSurfY=FIL_CY+FIL_RY*Math.cos(rad);
+    scene.appendChild(mk('line',{x1:cx,y1:filSurfY,x2:cx,y2:pabY-(Math.cos(rad)>=0?PAB_R:-PAB_R),stroke:'#333','stroke-width':'1.5'}));
+
+    // --- PAB (on top) ---
+    scene.appendChild(mk('circle',{cx:cx,cy:pabY,r:PAB_R,fill:'url(#pg)',stroke:'#B8860B','stroke-width':'1.2'}));
+  }
+}
+
+function pill(t,c){
+  const p=document.getElementById('pl');p.textContent=t;
+  p.style.background=c==='uv'?'#F3E8FF':c==='bl'?'#E6F1FB':'#f0f0f0';
+  p.style.color=c==='uv'?'#7C3AED':c==='bl'?'#185FA5':'#666';
+}
+
+function showClashAt(angleDeg){
+  const rad=(angleDeg||0)*Math.PI/180;
+  const cg=document.getElementById('scene');
+  for(let i=0;i<N;i++){
+    const cx=X0+i*GAP;
+    const pabY=FIL_CY+ORBIT_R*Math.cos(rad);
+    if(Math.cos(rad)<0.3) continue;
+    const cy=pabY;
+    const spikes=8,outerR=12,innerR=5;
+    let pts='';
+    for(let s=0;s<spikes*2;s++){
+      const ang=(s*Math.PI/spikes)-Math.PI/2;
+      const r=s%2===0?outerR:innerR;
+      pts+=`${cx+r*Math.cos(ang)},${cy+r*Math.sin(ang)} `;
+    }
+    cg.appendChild(mk('polygon',{points:pts.trim(),fill:'#FF4444',opacity:'0.85',class:'clash-star'}));
+    cg.appendChild(mk('circle',{cx:cx,cy:cy,r:'3',fill:'#FFAA00',class:'clash-star'}));
+  }
+}
+
+function hideClashStars(){
+  document.querySelectorAll('.clash-star').forEach(e=>e.remove());
+}
+
+function animRotate(degDelta, dur, cb){
+  let start=null;const from=totalRotation;
+  function step(ts){
+    if(!start)start=ts;
+    const p=Math.min((ts-start)/dur,1);
+    const ease=p<0.5?2*p*p:(1-Math.pow(-2*p+2,2)/2);
+    totalRotation=from+degDelta*ease;
+    drawAll(totalRotation);
+    if(p<1)requestAnimationFrame(step);else if(cb)cb();
+  }
+  requestAnimationFrame(step);
+}
+
+function goBlue(){
+  if(busy||phase!=='bound')return;
+  busy=true;
+  document.getElementById('b-bl').classList.add('on-bl');
+  document.getElementById('b-uv').classList.remove('on-uv');
+  pill('Torque!','bl');
+
+  setTimeout(()=>{
+    showClashAt(totalRotation);
+    setTimeout(()=>{
+      hideClashStars();
+      animRotate(ROT_PER_STEP,2400,()=>{
+        busy=false;phase='pushed';
+        pill('Now UV','bl');
+      });
+    },400);
+  },300);
+}
+
+function goUV(){
+  if(busy||phase!=='pushed')return;
+  busy=true;
+  document.getElementById('b-uv').classList.add('on-uv');
+  document.getElementById('b-bl').classList.remove('on-bl');
+  pill('Opening...','uv');
+
+  drawAll(totalRotation);
+
+  setTimeout(()=>{
+    busy=false;phase='bound';
+    pill('Blue again','uv');
+  },400);
+}
+
+function goReset(){
+  busy=false;phase='bound';totalRotation=0;
+  document.getElementById('b-bl').classList.remove('on-bl');
+  document.getElementById('b-uv').classList.remove('on-uv');
+  pill('Ready','');
+  drawAll(0);
+}
+
+drawAll(0);
+</script>

@@ -1,0 +1,113 @@
+<style>
+body{margin:0;padding:0;background:white;font-family:system-ui,sans-serif}
+svg text{font-family:system-ui,sans-serif}
+</style>
+
+<svg id="scene" width="100%" viewBox="0 200 500 220">
+  <defs>
+    <radialGradient id="fil-grad" cx="45%" cy="40%">
+      <stop offset="0%" stop-color="#d4f0cf"/>
+      <stop offset="60%" stop-color="#8dc485"/>
+      <stop offset="100%" stop-color="#5a9e52"/>
+    </radialGradient>
+    <radialGradient id="pab-grad">
+      <stop offset="0%" stop-color="#FFE066"/>
+      <stop offset="100%" stop-color="#F5B800"/>
+    </radialGradient>
+  </defs>
+
+
+  <!-- Filament cross-section (lowered, lifts up) -->
+  <g id="fil-group">
+    <circle cx="250" cy="290" r="38" fill="url(#fil-grad)" stroke="#5a9e52" stroke-width="2"/>
+    <text x="250" y="286" text-anchor="middle" font-size="11" fill="#2a5c24" font-weight="600">Filament</text>
+    <text x="250" y="300" text-anchor="middle" font-size="9" fill="#3d7a36">(cross-section)</text>
+  </g>
+
+  <!-- Green arm from filament bottom → PAB near hinge azobenzene -->
+  <g id="green-arm">
+    <line id="arm-line" x1="250" y1="328" x2="250" y2="348" stroke="#5a9e52" stroke-width="5" stroke-linecap="round"/>
+    <circle id="pab" cx="250" cy="355" r="10" fill="url(#pab-grad)" stroke="#B8860B" stroke-width="1.5"/>
+  </g>
+
+  <!-- Hinge: tilted -60 degrees, shifted right, base on slide -->
+  <g id="hinge-whole" transform="rotate(-60 270 370)">
+    <!-- Base (on slide) -->
+    <rect x="258" y="352" width="24" height="36" rx="3" fill="#2563EB" stroke="#1d4ed8" stroke-width="1"/>
+    <!-- Arm (same size) -->
+    <g id="hinge-arm">
+      <rect x="258" y="312" width="24" height="36" rx="3" fill="#2563EB" stroke="#1d4ed8" stroke-width="1"/>
+      <path d="M258 312 L270 305 L282 312" fill="#60a5fa" stroke="#1d4ed8" stroke-width="0.8"/>
+      <!-- Azobenzene at joint -->
+      <path d="M256 342 L248 348 L256 354" fill="none" stroke="#DC2626" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </g>
+
+  <!-- Force arrow (upward) -->
+  <g id="force-arrow" opacity="0">
+    <line x1="250" y1="340" x2="250" y2="300" stroke="#DC2626" stroke-width="3"/>
+    <polygon points="250,295 244,307 256,307" fill="#DC2626"/>
+    <text x="264" y="308" font-size="10" fill="#DC2626" font-weight="600">push up!</text>
+  </g>
+
+  <!-- Clash burst -->
+  <g id="clash-burst" opacity="0"></g>
+
+  <!-- Slide surface -->
+  <rect x="50" y="378" width="400" height="10" rx="3" fill="#e8e8e8" stroke="#ccc" stroke-width="0.5"/>
+  <text x="250" y="387" text-anchor="middle" font-size="9" fill="#888">Slide</text>
+
+  <!-- Legend -->
+  <g transform="translate(40,400)">
+    <circle cx="6" cy="5" r="5" fill="url(#fil-grad)" stroke="#5a9e52"/>
+    <text x="16" y="9" font-size="9" fill="#555">Filament</text>
+    <rect x="80" y="0" width="8" height="10" rx="1" fill="#2563EB"/>
+    <text x="92" y="9" font-size="9" fill="#555">Hinge (tilted)</text>
+    <circle cx="175" cy="5" r="5" fill="url(#pab-grad)" stroke="#B8860B" stroke-width="0.5"/>
+    <text x="185" y="9" font-size="9" fill="#555">Fusion protein</text>
+    <path d="M265 1 L259 6 L265 11" fill="none" stroke="#DC2626" stroke-width="1.5" stroke-linecap="round"/>
+    <text x="271" y="9" font-size="9" fill="#555">Azobenzene</text>
+  </g>
+</svg>
+
+<script>
+const NS='http://www.w3.org/2000/svg';
+function mk(t,a){const e=document.createElementNS(NS,t);for(const[k,v]of Object.entries(a))e.setAttribute(k,v);return e}
+
+function buildClash(){
+  const cg=document.getElementById('clash-burst');
+  cg.innerHTML='';
+  const cx=252, cy=350;
+  const spikes=8, outerR=11, innerR=5;
+  let pts='';
+  for(let s=0;s<spikes*2;s++){
+    const ang=(s*Math.PI/spikes)-Math.PI/2;
+    const r=s%2===0?outerR:innerR;
+    pts+=`${cx+r*Math.cos(ang)},${cy+r*Math.sin(ang)} `;
+  }
+  cg.appendChild(mk('polygon',{points:pts.trim(),fill:'#FF4444',opacity:'0.9'}));
+  cg.appendChild(mk('circle',{cx:cx,cy:cy,r:'3',fill:'#FFAA00'}));
+}
+
+function setState(armDeg, liftY, forceArrow, clash){
+  document.getElementById('fil-group').setAttribute('transform',`translate(0,${liftY})`);
+
+  const surfY = 328 + liftY;
+  const pabY = 355 + liftY;
+  document.getElementById('arm-line').setAttribute('y1', surfY);
+  document.getElementById('arm-line').setAttribute('y2', pabY - 7);
+  document.getElementById('pab').setAttribute('cy', pabY);
+
+  document.getElementById('hinge-arm').setAttribute('transform',`rotate(${armDeg} 270 348)`);
+
+  document.getElementById('force-arrow').setAttribute('opacity', forceArrow);
+  document.getElementById('force-arrow').setAttribute('transform',`translate(0,${liftY})`);
+
+  document.getElementById('clash-burst').setAttribute('opacity', clash);
+  document.getElementById('clash-burst').setAttribute('transform',`translate(0,${liftY})`);
+}
+
+buildClash();
+setState(-20, 0, 0, 0);
+window.setState=setState;
+</script>

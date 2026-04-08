@@ -1,0 +1,229 @@
+<style>
+body{margin:0;padding:0;background:white;font-family:system-ui,sans-serif}
+svg text{font-family:system-ui,sans-serif}
+.cr{display:flex;align-items:center;gap:10px;margin:6px 0 0 10px;flex-wrap:wrap}
+.cr button{min-width:110px;padding:6px 12px;font-size:12px;cursor:pointer;border:1px solid #ccc;border-radius:6px}
+.cr button.on-bl{background:#E6F1FB;color:#185FA5;border-color:#85B7EB}
+.cr button.on-uv{background:#F3E8FF;color:#7C3AED;border-color:#C4B5FD}
+.pl{display:inline-block;font-size:11px;padding:2px 8px;border-radius:4px;font-weight:500;background:#f0f0f0;color:#666}
+</style>
+
+<svg width="100%" viewBox="0 0 640 290">
+  <defs>
+    <linearGradient id="cyl" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#c8eac3"/>
+      <stop offset="50%" stop-color="#8dc485"/>
+      <stop offset="100%" stop-color="#6aaa5e"/>
+    </linearGradient>
+    <radialGradient id="pg">
+      <stop offset="0%" stop-color="#FFE066"/>
+      <stop offset="100%" stop-color="#F5B800"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Direction arrow -->
+  <g id="dir-arrow">
+    <polygon points="300,10 335,10 335,5 350,17 335,29 335,24 300,24" fill="white" stroke="#333" stroke-width="1.5"/>
+  </g>
+
+  <!-- Movable group: filament + connectors + PABs -->
+  <g id="movable">
+    <!-- Filament cylinder -->
+    <rect x="30" y="40" width="520" height="45" fill="url(#cyl)" stroke="#6aaa5e" stroke-width="1"/>
+    <ellipse cx="550" cy="62" rx="14" ry="22.5" fill="#8dc485" stroke="#6aaa5e" stroke-width="1"/>
+    <ellipse cx="30" cy="62" rx="14" ry="22.5" fill="url(#cyl)" stroke="#6aaa5e" stroke-width="1"/>
+
+    <!-- Connectors + PABs built by JS -->
+    <g id="binders"></g>
+  </g>
+
+  <!-- Hinges (fixed on slide) -->
+  <g id="hinges"></g>
+
+  <!-- Clash indicators -->
+  <g id="clash-indicators" opacity="0"></g>
+
+  <!-- Slide surface -->
+  <rect x="20" y="232" width="600" height="14" rx="3" fill="#d0d0d0" stroke="#aaa" stroke-width="0.5"/>
+  <text x="320" y="243" text-anchor="middle" font-size="10" fill="#666">Slide</text>
+</svg>
+
+<div class="cr">
+  <button id="b-bl" onclick="goBlue()">Blue (close → push)</button>
+  <button id="b-uv" onclick="goUV()">UV (open → advance)</button>
+  <button onclick="goReset()">Reset</button>
+  <span id="pl" class="pl">Ready</span>
+</div>
+
+<script>
+const NS='http://www.w3.org/2000/svg';
+const N=6, GAP=82, X0=80;
+const FIL_BOT=85; // filament bottom y
+const SLIDE_Y=232;
+
+// Hinge geometry
+const HINGE_W=22, HINGE_H=32;
+const BASE_BOT=SLIDE_Y; // base bottom touches slide
+const BASE_TOP=BASE_BOT-HINGE_H; // 200
+const JOINT_Y=BASE_TOP-2; // azobenzene joint = 198
+const ARM_BOT=JOINT_Y;
+const ARM_TOP=ARM_BOT-HINGE_H; // 166
+
+// PAB sits at azobenzene joint
+const PAB_CY=JOINT_Y;
+const PAB_R=8;
+
+const OPEN_ANG=-25;
+const BLUE_PUSH=60;
+const UV_ADVANCE=GAP-BLUE_PUSH;
+
+let offset=0, busy=false, phase='bound';
+
+function mk(t,a){const e=document.createElementNS(NS,t);for(const[k,v]of Object.entries(a))e.setAttribute(k,v);return e}
+
+function buildBinders(){
+  const bg=document.getElementById('binders');bg.innerHTML='';
+  for(let i=0;i<N;i++){
+    const cx=X0+i*GAP;
+    // Thin line from filament bottom to PAB
+    bg.appendChild(mk('line',{x1:cx,y1:FIL_BOT,x2:cx,y2:PAB_CY-PAB_R,stroke:'#333','stroke-width':'1.5'}));
+    // PAB circle
+    bg.appendChild(mk('circle',{cx:cx,cy:PAB_CY,r:PAB_R,fill:'url(#pg)',stroke:'#B8860B','stroke-width':'1.2'}));
+  }
+}
+
+function buildHinges(open){
+  const hg=document.getElementById('hinges');hg.innerHTML='';
+  for(let i=0;i<N;i++){
+    const cx=X0+i*GAP;
+    const ug=mk('g',{});
+
+    // Base (bottom, fixed)
+    ug.appendChild(mk('rect',{x:cx-HINGE_W/2,y:BASE_TOP,width:HINGE_W,height:HINGE_H,rx:'2',fill:'#2563EB',stroke:'#1d4ed8','stroke-width':'1'}));
+    // Stem to slide
+    ug.appendChild(mk('line',{x1:cx,y1:BASE_BOT,x2:cx,y2:SLIDE_Y,stroke:'#333','stroke-width':'2'}));
+
+    // Arm (top, rotates)
+    const tG=mk('g',{class:'ta'});
+    tG.style.transition='transform 0.5s ease';
+    tG.style.transformOrigin=`${cx}px ${JOINT_Y}px`;
+    tG.style.transform=open?`rotate(${OPEN_ANG}deg)`:'rotate(0deg)';
+
+    tG.appendChild(mk('rect',{x:cx-HINGE_W/2,y:ARM_TOP,width:HINGE_W,height:HINGE_H,rx:'2',fill:'#2563EB',stroke:'#1d4ed8','stroke-width':'1'}));
+
+    // Azobenzene chevron at joint
+    tG.appendChild(mk('path',{
+      d:`M${cx-HINGE_W/2-2} ${JOINT_Y-6} L${cx-HINGE_W/2-8} ${JOINT_Y} L${cx-HINGE_W/2-2} ${JOINT_Y+6}`,
+      fill:'none',stroke:'#DC2626','stroke-width':'2.5','stroke-linecap':'round','stroke-linejoin':'round'
+    }));
+
+    ug.appendChild(tG);
+    hg.appendChild(ug);
+  }
+}
+
+function buildClashIndicators(){
+  const cg=document.getElementById('clash-indicators');cg.innerHTML='';
+  for(let i=0;i<N;i++){
+    const cx=X0+i*GAP;
+    const cy=PAB_CY;
+    const spikes=8,outerR=12,innerR=5;
+    let pts='';
+    for(let s=0;s<spikes*2;s++){
+      const ang=(s*Math.PI/spikes)-Math.PI/2;
+      const r=s%2===0?outerR:innerR;
+      pts+=`${cx+r*Math.cos(ang)},${cy+r*Math.sin(ang)} `;
+    }
+    cg.appendChild(mk('polygon',{points:pts.trim(),fill:'#FF4444',opacity:'0.9'}));
+    cg.appendChild(mk('circle',{cx:cx,cy:cy,r:'3',fill:'#FFAA00'}));
+  }
+}
+
+function showClash(){
+  const cg=document.getElementById('clash-indicators');
+  cg.style.transition='opacity 0.15s';cg.style.opacity='1';
+  setTimeout(()=>{cg.style.transition='opacity 0.4s';cg.style.opacity='0.7';},200);
+}
+function hideClash(){
+  const cg=document.getElementById('clash-indicators');
+  cg.style.transition='opacity 0.8s ease-out';cg.style.opacity='0';
+}
+
+function pill(t,c){
+  const p=document.getElementById('pl');p.textContent=t;
+  p.style.background=c==='uv'?'#F3E8FF':c==='bl'?'#E6F1FB':'#f0f0f0';
+  p.style.color=c==='uv'?'#7C3AED':c==='bl'?'#185FA5':'#666';
+}
+
+function animMove(dist,dur,cb){
+  let start=null;const from=offset;
+  function step(ts){
+    if(!start)start=ts;
+    const p=Math.min((ts-start)/dur,1);
+    const ease=p<0.5?2*p*p:(1-Math.pow(-2*p+2,2)/2);
+    offset=from+dist*ease;
+    document.getElementById('movable').setAttribute('transform',`translate(${offset},0)`);
+    if(p<1)requestAnimationFrame(step);else if(cb)cb();
+  }
+  requestAnimationFrame(step);
+}
+
+function goBlue(){
+  if(busy||phase!=='bound')return;
+  busy=true;
+  document.getElementById('b-bl').classList.add('on-bl');
+  document.getElementById('b-uv').classList.remove('on-uv');
+  pill('Closing...','bl');
+
+  // Close arms
+  document.querySelectorAll('.ta').forEach(t=>{t.style.transform='rotate(0deg)'});
+
+  // Clash → push
+  setTimeout(()=>{
+    showClash();
+    pill('Push!','bl');
+    setTimeout(()=>{
+      animMove(BLUE_PUSH,800,()=>{
+        hideClash();
+        busy=false;phase='pushed';
+        pill('Now UV','bl');
+      });
+    },300);
+  },500);
+}
+
+function goUV(){
+  if(busy||phase!=='pushed')return;
+  busy=true;
+  document.getElementById('b-uv').classList.add('on-uv');
+  document.getElementById('b-bl').classList.remove('on-bl');
+  pill('Opening...','uv');
+
+  document.querySelectorAll('.ta').forEach(t=>{t.style.transform=`rotate(${OPEN_ANG}deg)`});
+
+  setTimeout(()=>{
+    pill('Advance','uv');
+    animMove(UV_ADVANCE,600,()=>{
+      busy=false;phase='bound';
+      pill('Blue again','uv');
+    });
+  },400);
+}
+
+function goReset(){
+  busy=false;phase='bound';offset=0;
+  document.getElementById('b-bl').classList.remove('on-bl');
+  document.getElementById('b-uv').classList.remove('on-uv');
+  const cg=document.getElementById('clash-indicators');
+  cg.style.transition='none';cg.style.opacity='0';
+  document.getElementById('movable').setAttribute('transform','translate(0,0)');
+  pill('Ready','');
+  buildHinges(true);
+  buildBinders();
+  buildClashIndicators();
+}
+
+buildHinges(true);
+buildBinders();
+buildClashIndicators();
+</script>
