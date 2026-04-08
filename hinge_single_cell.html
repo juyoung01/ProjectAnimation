@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Single Cell Hinge — Direction Explorer</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0B0F14;color:#E0E0E0;font-family:'Segoe UI',sans-serif;display:flex;flex-direction:column;align-items:center;height:100vh;overflow:hidden}
+h1{margin-top:10px;font-size:18px;font-weight:600}
+.sub{font-size:10px;color:#7F8C8D;margin-top:2px;text-align:center;max-width:700px}
+canvas{margin-top:6px}
+.controls{display:flex;gap:20px;margin-top:8px;flex-wrap:wrap;justify-content:center;align-items:flex-start}
+.hinge-ctrl{display:flex;flex-direction:column;align-items:center;gap:4px;background:#111820;border:1px solid #222;border-radius:6px;padding:8px 12px;min-width:90px}
+.hinge-ctrl.active{border-color:#E74C3C}
+.hinge-label{font-size:11px;font-weight:600;color:#5DADE2}
+.dir-btns{display:flex;gap:4px}
+.dir-btn{width:28px;height:28px;border:1px solid #333;background:none;color:#888;border-radius:4px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:all 0.15s}
+.dir-btn:hover{border-color:#E74C3C;color:#E74C3C}
+.dir-btn.sel{background:#E74C3C;color:#fff;border-color:#E74C3C}
+.dir-val{font-size:9px;color:#555;font-family:monospace}
+.row{display:flex;gap:10px;align-items:center;margin-top:6px;font-size:11px;flex-wrap:wrap;justify-content:center}
+.btn{padding:3px 10px;border:1px solid #444;background:none;color:#aaa;border-radius:4px;cursor:pointer;font-size:10px;transition:all 0.2s}
+.btn:hover{border-color:#E74C3C;color:#E74C3C}
+.btn.on{background:#E74C3C;color:#fff;border-color:#E74C3C}
+.preset-btn{padding:4px 10px;border:1px solid #333;background:#111820;color:#888;border-radius:4px;cursor:pointer;font-size:10px;transition:all 0.2s}
+.preset-btn:hover{border-color:#2E86AB;color:#5DADE2}
+.preset-btn.active{background:#1A3A50;color:#5DADE2;border-color:#2E86AB}
+input[type=range]{width:120px;accent-color:#E74C3C;background:#1A2030}
+.legend{display:flex;gap:14px;margin-top:4px;font-size:9px;color:#555}
+.ldot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:3px;vertical-align:middle}
+.lbar{width:16px;height:5px;border-radius:2px;display:inline-block;margin-right:3px;vertical-align:middle}
+</style>
+</head>
+<body>
+<h1>Single Cell — Hinge Direction Explorer</h1>
+<p class="sub">사각형 하나의 힌지 4개 방향을 각각 바꿔가며 변형을 탐색합니다</p>
+<canvas id="c"></canvas>
+
+<!-- Preset row -->
+<div class="row">
+  <span style="color:#5D6D7E;font-size:10px">Presets:</span>
+  <button class="preset-btn" data-preset="flat">Flat</button>
+  <button class="preset-btn" data-preset="contract">Contract</button>
+  <button class="preset-btn" data-preset="expand">Expand</button>
+  <button class="preset-btn" data-preset="shear">Shear</button>
+  <button class="preset-btn" data-preset="aniso">Aniso</button>
+  <button class="preset-btn" data-preset="saddle">Saddle</button>
+</div>
+
+<!-- 4 hinge direction controls -->
+<div class="controls">
+  <div class="hinge-ctrl" id="ctrl-top">
+    <span class="hinge-label">Top (H)</span>
+    <div class="dir-btns">
+      <button class="dir-btn" data-hinge="top" data-dir="-1" title="Inward (down)">&#x25BC;</button>
+      <button class="dir-btn sel" data-hinge="top" data-dir="0" title="Flat">&#x25CF;</button>
+      <button class="dir-btn" data-hinge="top" data-dir="1" title="Outward (up)">&#x25B2;</button>
+    </div>
+    <span class="dir-val" id="val-top">0</span>
+  </div>
+  <div class="hinge-ctrl" id="ctrl-right">
+    <span class="hinge-label">Right (V)</span>
+    <div class="dir-btns">
+      <button class="dir-btn" data-hinge="right" data-dir="-1" title="Inward (left)">&#x25C0;</button>
+      <button class="dir-btn sel" data-hinge="right" data-dir="0" title="Flat">&#x25CF;</button>
+      <button class="dir-btn" data-hinge="right" data-dir="1" title="Outward (right)">&#x25B6;</button>
+    </div>
+    <span class="dir-val" id="val-right">0</span>
+  </div>
+  <div class="hinge-ctrl" id="ctrl-bottom">
+    <span class="hinge-label">Bottom (H)</span>
+    <div class="dir-btns">
+      <button class="dir-btn" data-hinge="bottom" data-dir="1" title="Outward (down)">&#x25BC;</button>
+      <button class="dir-btn sel" data-hinge="bottom" data-dir="0" title="Flat">&#x25CF;</button>
+      <button class="dir-btn" data-hinge="bottom" data-dir="-1" title="Inward (up)">&#x25B2;</button>
+    </div>
+    <span class="dir-val" id="val-bottom">0</span>
+  </div>
+  <div class="hinge-ctrl" id="ctrl-left">
+    <span class="hinge-label">Left (V)</span>
+    <div class="dir-btns">
+      <button class="dir-btn" data-hinge="left" data-dir="1" title="Outward (left)">&#x25C0;</button>
+      <button class="dir-btn sel" data-hinge="left" data-dir="0" title="Flat">&#x25CF;</button>
+      <button class="dir-btn" data-hinge="left" data-dir="-1" title="Inward (right)">&#x25B6;</button>
+    </div>
+    <span class="dir-val" id="val-left">0</span>
+  </div>
+</div>
+
+<div class="row">
+  <button class="btn on" id="ba">Auto</button>
+  <button class="btn" id="bm">Manual</button>
+  <span style="color:#777">Bend:</span>
+  <input type="range" id="sl" min="0" max="100" value="0" disabled>
+  <span id="al" style="color:#E74C3C;font-family:monospace;font-size:11px;min-width:28px">0°</span>
+</div>
+<div class="legend">
+  <span><span class="lbar" style="background:linear-gradient(90deg,#2471A3,#3498DB)"></span>Half-segment (length fixed = L/2)</span>
+  <span><span class="ldot" style="background:#E74C3C"></span>Hinge (bend angle θ)</span>
+  <span><span class="ldot" style="background:#1B4F72"></span>Corner joint (moves)</span>
+</div>
+
+<script>
+const C = document.getElementById('c'), X = C.getContext('2d');
+let W, H;
+function resize() { W = C.width = Math.min(window.innerWidth - 20, 900); H = C.height = Math.min(window.innerHeight - 310, 380); }
+resize(); window.addEventListener('resize', resize);
+
+let auto = true, t = 0, param = 0;
+const sl = document.getElementById('sl'), al = document.getElementById('al');
+
+// Hinge directions: +1 = outward, -1 = inward, 0 = flat
+const hingeDir = { top: 0, right: 0, bottom: 0, left: 0 };
+
+document.getElementById('ba').onclick = () => { auto=true; document.getElementById('ba').classList.add('on'); document.getElementById('bm').classList.remove('on'); sl.disabled=true; };
+document.getElementById('bm').onclick = () => { auto=false; document.getElementById('bm').classList.add('on'); document.getElementById('ba').classList.remove('on'); sl.disabled=false; };
+sl.oninput = () => { param = sl.value / 100; };
+
+// Direction buttons
+document.querySelectorAll('.dir-btn').forEach(btn => {
+  btn.onclick = () => {
+    const hinge = btn.dataset.hinge;
+    const dir = parseInt(btn.dataset.dir);
+    hingeDir[hinge] = dir;
+    // Update button states
+    document.querySelectorAll(`.dir-btn[data-hinge="${hinge}"]`).forEach(b => b.classList.remove('sel'));
+    btn.classList.add('sel');
+    document.getElementById(`val-${hinge}`).textContent = dir > 0 ? '+1' : dir < 0 ? '-1' : '0';
+    document.getElementById(`ctrl-${hinge}`).classList.toggle('active', dir !== 0);
+    // Clear preset highlight
+    document.querySelectorAll('.preset-btn').forEach(p => p.classList.remove('active'));
+  };
+});
+
+// Presets
+const presets = {
+  flat:     { top: 0, right: 0, bottom: 0, left: 0 },
+  contract: { top: -1, right: -1, bottom: -1, left: -1 },  // all inward
+  expand:   { top: 1, right: 1, bottom: 1, left: 1 },      // all outward
+  shear:    { top: 1, right: 1, bottom: -1, left: -1 },     // all hinges shift same direction (up-right) — creates lattice shear
+  aniso:    { top: 1, right: 0, bottom: 1, left: 0 },       // H edges outward only
+  saddle:   { top: -1, right: 1, bottom: -1, left: 1 },     // H inward, V outward (alternating)
+};
+
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.onclick = () => {
+    const p = presets[btn.dataset.preset];
+    if (!p) return;
+    for (const [k, v] of Object.entries(p)) {
+      hingeDir[k] = v;
+      document.querySelectorAll(`.dir-btn[data-hinge="${k}"]`).forEach(b => {
+        b.classList.toggle('sel', parseInt(b.dataset.dir) === v);
+      });
+      document.getElementById(`val-${k}`).textContent = v > 0 ? '+1' : v < 0 ? '-1' : '0';
+      document.getElementById(`ctrl-${k}`).classList.toggle('active', v !== 0);
+    }
+    document.querySelectorAll('.preset-btn').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+  };
+});
+
+// ─── Drawing ───
+function drawStrut(x1, y1, x2, y2, w) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.sqrt(dx*dx + dy*dy);
+  if (len < 0.5) return;
+  const ang = Math.atan2(dy, dx);
+  X.save();
+  X.translate((x1+x2)/2, (y1+y2)/2);
+  X.rotate(ang);
+  const hl = len/2, hw = w/2;
+  const d = 3;
+  X.fillStyle = '#2471A3';
+  X.beginPath();
+  X.moveTo(-hl,-hw); X.lineTo(-hl+d,-hw-d); X.lineTo(hl+d,-hw-d); X.lineTo(hl,-hw);
+  X.closePath(); X.fill();
+  X.fillStyle = '#1A5276';
+  X.beginPath();
+  X.moveTo(hl,-hw); X.lineTo(hl+d,-hw-d); X.lineTo(hl+d,hw-d); X.lineTo(hl,hw);
+  X.closePath(); X.fill();
+  const g = X.createLinearGradient(0,-hw,0,hw);
+  g.addColorStop(0,'#3498DB'); g.addColorStop(0.5,'#2E86C1'); g.addColorStop(1,'#2471A3');
+  X.fillStyle = g;
+  X.fillRect(-hl,-hw,len,w);
+  X.strokeStyle='#1A5276'; X.lineWidth=0.7;
+  X.strokeRect(-hl,-hw,len,w);
+  X.strokeStyle='rgba(255,255,255,0.18)'; X.lineWidth=0.5;
+  const seg = Math.max(2, Math.round(len/14));
+  for (let i=1;i<seg;i++){
+    const sx = -hl+(len/seg)*i;
+    X.beginPath(); X.moveTo(sx,-hw+1); X.lineTo(sx,hw-1); X.stroke();
+  }
+  X.restore();
+}
+
+function drawHinge(x, y, active, pulse, label) {
+  if (active) {
+    const gr = X.createRadialGradient(x,y,3,x,y,16+Math.sin(pulse)*3);
+    gr.addColorStop(0,'rgba(231,76,60,0.5)');
+    gr.addColorStop(1,'rgba(231,76,60,0)');
+    X.fillStyle = gr;
+    X.beginPath(); X.arc(x,y,18,0,Math.PI*2); X.fill();
+  }
+  X.fillStyle = active ? '#E74C3C' : '#922B21';
+  X.beginPath(); X.arc(x,y,7,0,Math.PI*2); X.fill();
+  X.fillStyle = active ? '#F5B7B1' : '#D98880';
+  X.beginPath(); X.arc(x,y,3,0,Math.PI*2); X.fill();
+  // Label
+  if (label) {
+    X.fillStyle = '#888'; X.font = '10px Arial'; X.textAlign = 'center'; X.textBaseline = 'middle';
+  }
+}
+
+function drawCorner(x, y) {
+  X.fillStyle = '#1B4F72';
+  X.beginPath(); X.arc(x,y,8,0,Math.PI*2); X.fill();
+  X.fillStyle = '#2E86C1';
+  X.beginPath(); X.arc(x,y,4,0,Math.PI*2); X.fill();
+}
+
+// ─── Single Cell with Analytical Geometry ───
+function drawCell(bendAmount, pulse) {
+  const L = Math.min(W * 0.35, H * 0.65);
+  const halfL = L / 2;
+  const sw = 14;
+  const maxAngle = Math.PI * 0.5;
+  const cx = W / 2, cy = H / 2;
+
+  // Compute target corner-to-corner distance for each edge
+  // theta = bendAmount * maxAngle * |dir|
+  // targetDist = L * cos(theta/2)
+  const edgeInfo = {};
+  for (const name of ['top', 'right', 'bottom', 'left']) {
+    const absDir = Math.abs(hingeDir[name]);
+    const theta = bendAmount * maxAngle * absDir;
+    edgeInfo[name] = {
+      theta,
+      targetDist: L * Math.cos(theta / 2),
+      signDir: hingeDir[name],
+    };
+  }
+
+  // Cell dimensions: rectangle with correct edge lengths
+  // For all our presets, opposite edges have same |dir| → same targetDist
+  const cellW = edgeInfo.top.targetDist;   // horizontal edges
+  const cellH = edgeInfo.right.targetDist; // vertical edges
+
+  // Corner positions: TL(0), TR(1), BR(2), BL(3) — clean rectangle
+  const corners = [
+    { x: cx - cellW/2, y: cy - cellH/2 },
+    { x: cx + cellW/2, y: cy - cellH/2 },
+    { x: cx + cellW/2, y: cy + cellH/2 },
+    { x: cx - cellW/2, y: cy + cellH/2 },
+  ];
+
+  // Draw ghost of original square
+  X.strokeStyle = 'rgba(255,255,255,0.06)'; X.lineWidth = 1;
+  X.setLineDash([4, 4]);
+  X.strokeRect(cx - L/2, cy - L/2, L, L);
+  X.setLineDash([]);
+
+  // 4 struts with outward normal directions
+  // "outward" means away from cell center for each edge
+  const strutDefs = [
+    { name: 'top',    i: 0, j: 1, outX: 0, outY: -1 },
+    { name: 'right',  i: 1, j: 2, outX: 1, outY: 0 },
+    { name: 'bottom', i: 2, j: 3, outX: 0, outY: 1 },
+    { name: 'left',   i: 3, j: 0, outX: -1, outY: 0 },
+  ];
+
+  // Count inward hinges to decide if we need transparency
+  const hasInward = strutDefs.some(sd => edgeInfo[sd.name].signDir < 0);
+
+  const hingePoints = [];
+  for (const sd of strutDefs) {
+    const ci = corners[sd.i], cj = corners[sd.j];
+    const mx = (ci.x + cj.x) / 2, my = (ci.y + cj.y) / 2;
+    const dist = Math.sqrt((cj.x-ci.x)**2 + (cj.y-ci.y)**2);
+
+    // Hinge perpendicular offset: h = sqrt(halfL² - (dist/2)²)
+    const h2 = halfL * halfL - (dist / 2) * (dist / 2);
+    const h = h2 > 0 ? Math.sqrt(h2) : 0;
+
+    // signDir: +1 = outward, -1 = inward, 0 = flat
+    const dir = edgeInfo[sd.name].signDir;
+    const hx = mx + dir * h * sd.outX;
+    const hy = my + dir * h * sd.outY;
+
+    // Draw two half-segments (reduce alpha for inward struts to reduce visual clutter)
+    if (hasInward && bendAmount > 0.1) X.globalAlpha = (dir < 0) ? 0.55 : 0.85;
+    drawStrut(ci.x, ci.y, hx, hy, sw);
+    drawStrut(hx, hy, cj.x, cj.y, sw);
+    X.globalAlpha = 1;
+
+    hingePoints.push({
+      x: hx, y: hy,
+      name: sd.name,
+      active: Math.abs(dir) > 0 && bendAmount > 0.03,
+    });
+  }
+
+  // Draw hinges
+  for (const hp of hingePoints) {
+    drawHinge(hp.x, hp.y, hp.active, pulse);
+  }
+
+  // Draw corners
+  for (let k = 0; k < 4; k++) {
+    drawCorner(corners[k].x, corners[k].y);
+  }
+
+  // Labels for hinges
+  X.font = '11px Arial'; X.textAlign = 'center';
+  for (const hp of hingePoints) {
+    let lx = hp.x, ly = hp.y;
+    const off = 22;
+    if (hp.name === 'top') ly -= off;
+    else if (hp.name === 'bottom') ly += off + 4;
+    else if (hp.name === 'left') lx -= off + 8;
+    else if (hp.name === 'right') lx += off + 8;
+    X.fillStyle = hp.active ? '#E74C3C' : '#555';
+    X.fillText(hp.name.charAt(0).toUpperCase() + hp.name.slice(1), lx, ly);
+  }
+
+  // Show angle info
+  if (bendAmount > 0.03) {
+    const deg = (bendAmount * maxAngle * 180 / Math.PI).toFixed(0);
+    X.fillStyle = '#F1C40F'; X.font = '10px Segoe UI'; X.textAlign = 'right';
+    X.fillText('\u03B8 = ' + deg + '\u00B0 (per active hinge)', W - 12, H - 10);
+    X.fillText('\u03BB\u2081 \u2192 bend    \u03BB\u2082 \u2192 straighten', W - 12, H - 26);
+  }
+
+  // Deformation type detection
+  const t = hingeDir.top, r = hingeDir.right, b = hingeDir.bottom, l = hingeDir.left;
+  let deformType = '';
+  if (t===0 && r===0 && b===0 && l===0) deformType = 'Flat (no deformation)';
+  else if (t===-1 && r===-1 && b===-1 && l===-1) deformType = 'Contraction (all inward)';
+  else if (t===1 && r===1 && b===1 && l===1) deformType = 'Expansion (all outward)';
+  else if (t===1 && r===1 && b===-1 && l===-1) deformType = 'Shear (lattice convention)';
+  else if (t===-1 && r===-1 && b===1 && l===1) deformType = 'Shear (reversed)';
+  else if ((t!==0||b!==0) && r===0 && l===0) deformType = 'Anisotropic (H only)';
+  else if (t===0 && b===0 && (r!==0||l!==0)) deformType = 'Anisotropic (V only)';
+  else if (t===b && t!==0 && r===l && r!==0 && t!=r) deformType = 'Saddle / Alternating';
+  else deformType = 'Custom pattern';
+
+  X.fillStyle = '#2E86AB'; X.font = 'bold 12px Segoe UI'; X.textAlign = 'left';
+  X.fillText(deformType, 12, H - 10);
+
+  // Direction summary
+  X.fillStyle = '#555'; X.font = '10px monospace'; X.textAlign = 'left';
+  X.fillText(`T:${t>0?'+':''}${t}  R:${r>0?'+':''}${r}  B:${b>0?'+':''}${b}  L:${l>0?'+':''}${l}`, 12, H - 28);
+}
+
+function frame() {
+  X.fillStyle = '#0B0F14'; X.fillRect(0, 0, W, H);
+
+  if (auto) {
+    t += 0.012;
+    param = (Math.sin(t * 0.7 - Math.PI / 2) + 1) / 2 * 0.6;
+    sl.value = Math.round(param * 100);
+  }
+
+  const bendAngle = param * Math.PI * 0.42;
+  const bendDeg = bendAngle * 180 / Math.PI;
+  al.textContent = bendDeg.toFixed(0) + '\u00B0';
+
+  drawCell(param, t * 3);
+  requestAnimationFrame(frame);
+}
+frame();
+</script>
+</body>
+</html>

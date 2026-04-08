@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Hinge Lattice — Multi-Mode Shape Morphing</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0B0F14;color:#E0E0E0;font-family:'Segoe UI',sans-serif;display:flex;flex-direction:column;align-items:center;height:100vh;overflow:hidden}
+h1{margin-top:8px;font-size:17px;font-weight:600}
+.sub{font-size:10px;color:#7F8C8D;margin-top:2px;text-align:center;max-width:700px}
+canvas{margin-top:4px}
+.row{display:flex;gap:10px;align-items:center;margin-top:5px;font-size:12px;flex-wrap:wrap;justify-content:center}
+.btn{padding:3px 10px;border:1px solid #444;background:none;color:#aaa;border-radius:4px;cursor:pointer;font-size:10px;transition:all 0.2s}
+.btn:hover{border-color:#E74C3C;color:#E74C3C}
+.btn.on{background:#E74C3C;color:#fff;border-color:#E74C3C}
+.mode-btn{padding:4px 10px;border:1px solid #333;background:#111820;color:#888;border-radius:4px;cursor:pointer;font-size:10px;transition:all 0.2s}
+.mode-btn:hover{border-color:#2E86AB;color:#5DADE2}
+.mode-btn.active{background:#1A3A50;color:#5DADE2;border-color:#2E86AB;font-weight:600}
+select,input[type=range]{background:#1A2030;color:#ddd;border:1px solid #333;padding:2px 6px;border-radius:3px;font-size:11px}
+input[type=range]{width:120px;accent-color:#E74C3C}
+.legend{display:flex;gap:14px;margin-top:3px;font-size:9px;color:#555}
+.ldot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:3px;vertical-align:middle}
+.lbar{width:16px;height:5px;border-radius:2px;display:inline-block;margin-right:3px;vertical-align:middle}
+.mode-desc{font-size:10px;color:#5D6D7E;margin-top:2px;min-height:14px;text-align:center}
+</style>
+</head>
+<body>
+<h1>Hinge Lattice — Constraint-Based Shape Morphing</h1>
+<p class="sub">힌지 꺾임(θ) → 유효거리 단축(L·cosθ/2) → PBD solver로 꼭지점 이동 → 반절 세그먼트 길이 L/2 항상 유지</p>
+<canvas id="c"></canvas>
+
+<div class="row" id="modes">
+  <span style="color:#5D6D7E;font-size:10px">Mode:</span>
+  <button class="mode-btn active" data-mode="auxetic">Auxetic</button>
+  <button class="mode-btn" data-mode="shear">Shear</button>
+  <button class="mode-btn" data-mode="scale">Scale</button>
+  <button class="mode-btn" data-mode="aniso">Aniso</button>
+  <button class="mode-btn" data-mode="bend">Bend</button>
+  <button class="mode-btn" data-mode="twist">Twist</button>
+  <button class="mode-btn" data-mode="zigzag">Zigzag</button>
+</div>
+<div class="mode-desc" id="mdesc">Auxetic — checkerboard hinge pattern, uniform contraction</div>
+
+<div class="row">
+  <button class="btn on" id="ba">Auto</button>
+  <button class="btn" id="bm">Manual</button>
+  <span style="color:#777">Bend:</span>
+  <input type="range" id="sl" min="0" max="100" value="0" disabled>
+  <span id="al" style="color:#E74C3C;font-family:monospace;font-size:11px;min-width:28px">0°</span>
+  <span style="color:#444">|</span>
+  <span style="color:#777">Grid:</span>
+  <select id="gs">
+    <option value="2">2×2</option>
+    <option value="3" selected>3×3</option>
+    <option value="4">4×4</option>
+    <option value="5">5×5</option>
+  </select>
+</div>
+<div class="legend">
+  <span><span class="lbar" style="background:linear-gradient(90deg,#2471A3,#3498DB)"></span>Strut half-segment (length fixed = L/2)</span>
+  <span><span class="ldot" style="background:#E74C3C"></span>Hinge (angle θ changes)</span>
+  <span><span class="ldot" style="background:#1B4F72"></span>Corner joint (moves, angle fixed)</span>
+</div>
+
+<script>
+const C = document.getElementById('c'), X = C.getContext('2d');
+let W, H;
+function resize() { W = C.width = Math.min(window.innerWidth - 20, 1060); H = C.height = Math.min(window.innerHeight - 175, 440); }
+resize(); window.addEventListener('resize', resize);
+
+let auto = true, t = 0, param = 0;
+let currentMode = 'auxetic';
+const sl = document.getElementById('sl'), al = document.getElementById('al');
+
+document.getElementById('ba').onclick = () => { auto=true; document.getElementById('ba').classList.add('on'); document.getElementById('bm').classList.remove('on'); sl.disabled=true; };
+document.getElementById('bm').onclick = () => { auto=false; document.getElementById('bm').classList.add('on'); document.getElementById('ba').classList.remove('on'); sl.disabled=false; };
+sl.oninput = () => { param = sl.value / 100; };
+
+const modeDescs = {
+  auxetic: 'Auxetic — 체커보드 패턴, 균일 수축',
+  shear: 'Shear — 모든 힌지 같은 방향 → 대각선 전단',
+  scale: 'Scale — 바깥 힌지 반전 → 확장',
+  aniso: 'Aniso — 수평 힌지만 작동 → 수직 수축',
+  bend: 'Bend — 행별 점진적 꺾임 → 곡률',
+  twist: 'Twist — 대각선 의존 패턴 → 회전',
+  zigzag: 'Zigzag — 행 교대 → 아코디언'
+};
+
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentMode = btn.dataset.mode;
+    document.getElementById('mdesc').textContent = modeDescs[currentMode] || '';
+  };
+});
+
+// ═══════════════════════════════════════════════
+// HINGE SIGN — determines bend direction per strut
+// ═══════════════════════════════════════════════
+function getHingeSign(mode, type, r, c, n) {
+  switch (mode) {
+    case 'auxetic':
+      return ((r + c) % 2 === 0) ? 1 : -1;
+    case 'shear':
+      return 1; // all same direction
+    case 'scale':
+      // Opposite of auxetic: hinges bow outward
+      return ((r + c) % 2 === 0) ? -1 : 1;
+    case 'aniso':
+      if (type === 'h') return (r % 2 === 0) ? 1 : -1;
+      else return 0; // vertical struts don't bend
+    case 'bend':
+      if (type === 'h') return (2 * r / n) - 1; // -1 to +1 gradient
+      else return ((r + c) % 2 === 0) ? 0.3 : -0.3;
+    case 'twist':
+      if (type === 'h') return Math.sin((r - c) / n * Math.PI * 2);
+      else return Math.cos((r - c) / n * Math.PI * 2);
+    case 'zigzag':
+      if (type === 'h') return (r % 2 === 0) ? 1 : -1;
+      else return ((r + c) % 2 === 0) ? 1 : -1;
+    default:
+      return ((r + c) % 2 === 0) ? 1 : -1;
+  }
+}
+
+// ═══════════════════════════════════════════════
+// DRAWING
+// ═══════════════════════════════════════════════
+function drawStrut(x1, y1, x2, y2, w) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  if (len < 0.5) return;
+  const ang = Math.atan2(dy, dx);
+  X.save();
+  X.translate((x1 + x2) / 2, (y1 + y2) / 2);
+  X.rotate(ang);
+  const hl = len / 2, hw = w / 2;
+  const d = 2.5;
+  X.fillStyle = '#2471A3';
+  X.beginPath();
+  X.moveTo(-hl, -hw); X.lineTo(-hl + d, -hw - d); X.lineTo(hl + d, -hw - d); X.lineTo(hl, -hw);
+  X.closePath(); X.fill();
+  X.fillStyle = '#1A5276';
+  X.beginPath();
+  X.moveTo(hl, -hw); X.lineTo(hl + d, -hw - d); X.lineTo(hl + d, hw - d); X.lineTo(hl, hw);
+  X.closePath(); X.fill();
+  const g = X.createLinearGradient(0, -hw, 0, hw);
+  g.addColorStop(0, '#3498DB'); g.addColorStop(0.5, '#2E86C1'); g.addColorStop(1, '#2471A3');
+  X.fillStyle = g;
+  X.fillRect(-hl, -hw, len, w);
+  X.strokeStyle = '#1A5276'; X.lineWidth = 0.7;
+  X.strokeRect(-hl, -hw, len, w);
+  X.strokeStyle = 'rgba(255,255,255,0.18)'; X.lineWidth = 0.5;
+  const seg = Math.max(2, Math.round(len / 12));
+  for (let i = 1; i < seg; i++) {
+    const sx = -hl + (len / seg) * i;
+    X.beginPath(); X.moveTo(sx, -hw + 1); X.lineTo(sx, hw - 1); X.stroke();
+  }
+  X.restore();
+}
+
+function drawHinge(x, y, active, pulse) {
+  if (active) {
+    const gr = X.createRadialGradient(x, y, 2, x, y, 10 + Math.sin(pulse) * 2);
+    gr.addColorStop(0, 'rgba(231,76,60,0.5)');
+    gr.addColorStop(1, 'rgba(231,76,60,0)');
+    X.fillStyle = gr;
+    X.beginPath(); X.arc(x, y, 12, 0, Math.PI * 2); X.fill();
+  }
+  X.fillStyle = active ? '#E74C3C' : '#922B21';
+  X.beginPath(); X.arc(x, y, 4.5, 0, Math.PI * 2); X.fill();
+  X.fillStyle = active ? '#F5B7B1' : '#D98880';
+  X.beginPath(); X.arc(x, y, 2, 0, Math.PI * 2); X.fill();
+}
+
+function drawCorner(x, y) {
+  X.fillStyle = '#1B4F72';
+  X.beginPath(); X.arc(x, y, 5, 0, Math.PI * 2); X.fill();
+  X.fillStyle = '#2E86C1';
+  X.beginPath(); X.arc(x, y, 2.5, 0, Math.PI * 2); X.fill();
+}
+
+// ═══════════════════════════════════════════════
+// PHYSICS-BASED GRID
+//
+// Key equations:
+//   θ = bendAmount × maxAngle × |sign|     (hinge bend angle)
+//   d_target = L × cos(θ/2)                (effective corner distance)
+//   h_offset = L/2 × sin(θ/2)             (hinge perpendicular offset)
+//   |half-segment| = L/2                   (ALWAYS constant)
+//
+// Proof: |AH|² = (d/2)² + h²
+//       = (L cos θ/2 / 2)² + (L sin θ/2 / 2)²
+//       = (L/2)² × (cos² + sin²) = (L/2)²  ✓
+// ═══════════════════════════════════════════════
+function drawGrid(n, bendAmount, pulse) {
+  const margin = 60;
+  const availW = W - margin * 2;
+  const availH = H - margin * 2;
+  const cellSize = Math.min(availW, availH) / n;
+  const sw = Math.max(8, Math.min(16, cellSize * 0.12));
+  const L = cellSize; // strut length (full)
+  const halfL = L / 2; // half-segment length (CONSTANT)
+  const maxAngle = Math.PI * 0.55; // max hinge bend ~100°
+
+  const gridW = n * cellSize;
+  const gridH = n * cellSize;
+  const ox = (W - gridW) / 2;
+  const oy = (H - gridH) / 2;
+  const active = bendAmount > 0.03;
+
+  // ── Build strut list with target distances ──
+  const NC = (n + 1) * (n + 1); // number of corners
+  const px = new Float64Array(NC); // corner x
+  const py = new Float64Array(NC); // corner y
+
+  // Initialize corners at grid positions
+  for (let r = 0; r <= n; r++) {
+    for (let c = 0; c <= n; c++) {
+      const idx = r * (n + 1) + c;
+      px[idx] = ox + c * cellSize;
+      py[idx] = oy + r * cellSize;
+    }
+  }
+
+  const struts = []; // {i, j, targetDist, sign, theta}
+
+  // Horizontal struts
+  for (let r = 0; r <= n; r++) {
+    for (let c = 0; c < n; c++) {
+      const i = r * (n + 1) + c;
+      const j = r * (n + 1) + c + 1;
+      const sign = getHingeSign(currentMode, 'h', r, c, n);
+      const absSign = Math.abs(sign);
+      const theta = bendAmount * maxAngle * absSign;
+      const targetDist = L * Math.cos(theta / 2);
+      struts.push({ i, j, targetDist, sign, theta, type: 'h' });
+    }
+  }
+  // Vertical struts
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c <= n; c++) {
+      const i = r * (n + 1) + c;
+      const j = (r + 1) * (n + 1) + c;
+      const sign = getHingeSign(currentMode, 'v', r, c, n);
+      const absSign = Math.abs(sign);
+      const theta = bendAmount * maxAngle * absSign;
+      const targetDist = L * Math.cos(theta / 2);
+      struts.push({ i, j, targetDist, sign, theta, type: 'v' });
+    }
+  }
+
+  // ── PBD Constraint Solver ──
+  // Each strut constrains the distance between its two corners
+  // to targetDist = L × cos(θ/2)
+  const centerX = ox + gridW / 2;
+  const centerY = oy + gridH / 2;
+
+  for (let iter = 0; iter < 40; iter++) {
+    for (const s of struts) {
+      const dx = px[s.j] - px[s.i];
+      const dy = py[s.j] - py[s.i];
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 0.01) continue;
+
+      const diff = (s.targetDist - dist) / dist;
+      const cx = dx * diff * 0.5;
+      const cy = dy * diff * 0.5;
+
+      px[s.i] -= cx;
+      py[s.i] -= cy;
+      px[s.j] += cx;
+      py[s.j] += cy;
+    }
+
+    // Pin grid center to prevent drift
+    let avgX = 0, avgY = 0;
+    for (let k = 0; k < NC; k++) { avgX += px[k]; avgY += py[k]; }
+    avgX /= NC; avgY /= NC;
+    const sx = centerX - avgX;
+    const sy = centerY - avgY;
+    for (let k = 0; k < NC; k++) { px[k] += sx; py[k] += sy; }
+  }
+
+  // ── Draw struts with hinges ──
+  const hinges = [];
+  const corners = [];
+
+  for (let k = 0; k < NC; k++) {
+    corners.push({ x: px[k], y: py[k] });
+  }
+
+  for (const s of struts) {
+    const ax = px[s.i], ay = py[s.i];
+    const bx = px[s.j], by = py[s.j];
+    const mx = (ax + bx) / 2;
+    const my = (ay + by) / 2;
+    const dx = bx - ax, dy = by - ay;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 0.1) continue;
+
+    // Perpendicular unit vector
+    const ux = -dy / dist, uy = dx / dist;
+
+    // Hinge offset from rigid-segment constraint
+    // h² = (L/2)² - (dist/2)²
+    const halfDist = dist / 2;
+    const h2 = halfL * halfL - halfDist * halfDist;
+    const h = h2 > 0 ? Math.sqrt(h2) : 0;
+
+    const signDir = Math.sign(s.sign) || 1;
+    const hx = mx + signDir * h * ux;
+    const hy = my + signDir * h * uy;
+
+    drawStrut(ax, ay, hx, hy, sw);
+    drawStrut(hx, hy, bx, by, sw);
+    hinges.push({ x: hx, y: hy });
+  }
+
+  // Draw hinges on top
+  for (const h of hinges) drawHinge(h.x, h.y, active, pulse);
+  // Draw corners on top
+  for (const co of corners) drawCorner(co.x, co.y);
+
+  // Light symbol
+  if (active) {
+    let maxX = -Infinity, minY = Infinity;
+    for (const co of corners) {
+      if (co.x > maxX) maxX = co.x;
+      if (co.y < minY) minY = co.y;
+    }
+    const lx = maxX + 25, ly = minY - 15;
+    X.fillStyle = '#F1C40F';
+    X.beginPath(); X.arc(lx, ly, 7, 0, Math.PI * 2); X.fill();
+    X.strokeStyle = '#F39C12'; X.lineWidth = 1.5;
+    for (let i = 0; i < 8; i++) {
+      const a = i / 8 * Math.PI * 2 + pulse * 0.4;
+      X.beginPath();
+      X.moveTo(lx + Math.cos(a) * 9, ly + Math.sin(a) * 9);
+      X.lineTo(lx + Math.cos(a) * 14, ly + Math.sin(a) * 14);
+      X.stroke();
+    }
+    X.fillStyle = '#E67E22'; X.font = 'bold 7px Arial'; X.textAlign = 'center'; X.textBaseline = 'middle';
+    X.fillText('h\u03BD', lx, ly);
+    X.textBaseline = 'alphabetic';
+  }
+}
+
+function drawHUD(bendDeg) {
+  X.fillStyle = '#E74C3C'; X.font = 'bold 12px Courier New'; X.textAlign = 'left';
+  X.fillText('Bend: ' + bendDeg.toFixed(0) + '\u00B0', 12, H - 10);
+  const modeLabels = {
+    auxetic: 'Auxetic', shear: 'Shear', scale: 'Scale',
+    aniso: 'Anisotropic', bend: 'Bend', twist: 'Twist', zigzag: 'Zigzag'
+  };
+  X.fillStyle = '#2E86AB'; X.font = 'bold 11px Segoe UI';
+  X.fillText('Mode: ' + (modeLabels[currentMode] || currentMode), 12, H - 28);
+  if (bendDeg > 3) {
+    X.fillStyle = '#F1C40F'; X.font = '10px Segoe UI'; X.textAlign = 'right';
+    X.fillText('\u03BB\u2081 \u2192 bend    \u03BB\u2082 \u2192 straighten', W - 12, H - 10);
+  }
+}
+
+function frame() {
+  X.fillStyle = '#0B0F14'; X.fillRect(0, 0, W, H);
+  if (auto) {
+    t += 0.012;
+    param = (Math.sin(t * 0.7 - Math.PI / 2) + 1) / 2;
+    sl.value = Math.round(param * 100);
+  }
+  const bendAngle = param * Math.PI * 0.42;
+  const bendDeg = bendAngle * 180 / Math.PI;
+  al.textContent = bendDeg.toFixed(0) + '\u00B0';
+  const n = +document.getElementById('gs').value;
+  drawGrid(n, param, t * 3);
+  drawHUD(bendDeg);
+  requestAnimationFrame(frame);
+}
+frame();
+</script>
+</body>
+</html>

@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IRP Alternating — Hinge on Short, Clash with Long</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:#f8fafc;display:flex;flex-direction:column;align-items:center;padding:18px;min-height:100vh}
+  h1{font-size:17px;font-weight:600;color:#1e293b;margin-bottom:2px}
+  .sub{font-size:12px;color:#64748b;margin-bottom:12px;text-align:center;max-width:660px;line-height:1.5}
+  .stage{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:6px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+  .cr{display:flex;gap:10px;margin-top:12px;align-items:center;flex-wrap:wrap}
+  .cr button{padding:7px 16px;font-size:13px;font-weight:500;border:1.5px solid #cbd5e1;border-radius:8px;cursor:pointer;background:#fff;color:#334155;transition:all .15s}
+  .cr button:hover{background:#f1f5f9}
+  .cr button:disabled{opacity:.3;cursor:default}
+  .pill{font-size:11px;padding:3px 10px;border-radius:6px;background:#f1f5f9;color:#64748b;font-weight:500}
+  .pill.uv{background:#faf5ff;color:#7c3aed}.pill.bl{background:#eff6ff;color:#2563eb}
+  .legend{display:flex;gap:14px;margin-top:8px;flex-wrap:wrap}
+  .legend span{display:flex;align-items:center;gap:4px;font-size:11px;color:#64748b}
+</style>
+</head>
+<body>
+
+<h1>Alternating IRP — Hinge on Short Monomer, Clash with Long</h1>
+<p class="sub">긴 IRP ↔ 짧은 IRP(+hinge) 교대 — UV → hinge arm이 옆 긴 IRP와 충돌 → fiber 휨</p>
+
+<div class="stage"><svg id="svg" width="860" height="640" viewBox="0 0 860 640"></svg></div>
+
+<div class="cr">
+  <button id="btn-uv" onclick="goUV()">☀️ UV — Open</button>
+  <button id="btn-bl" onclick="goBlue()" disabled>🔵 Blue — Close</button>
+  <button onclick="goReset()">↺ Reset</button>
+  <span id="pill" class="pill">Ready</span>
+</div>
+
+<div class="legend">
+  <span><svg width="18" height="20"><polygon points="3,20 0,0 14,0 17,20" fill="#f87171" stroke="#dc2626" stroke-width="1"/></svg> Long IRP</span>
+  <span><svg width="18" height="12"><polygon points="3,12 1,0 13,0 15,12" fill="#fca5a5" stroke="#f87171" stroke-width="1"/></svg> Short IRP (+hinge)</span>
+  <span><svg width="16" height="16"><rect x="1" y="1" width="14" height="14" rx="2" fill="#2563EB" stroke="#1d4ed8" stroke-width=".8"/></svg> Hinge</span>
+  <span><svg width="16" height="14"><path d="M3 2 L8 7 L3 12" fill="none" stroke="#DC2626" stroke-width="2.5" stroke-linecap="round"/></svg> Azobenzene</span>
+  <span><svg width="16" height="16"><polygon points="8,0 10,5 16,5 11,9 13,16 8,11 3,16 5,9 0,5 6,5" fill="#ef4444"/></svg> Clash</span>
+</div>
+
+<script>
+const NS = 'http://www.w3.org/2000/svg';
+const svg = document.getElementById('svg');
+
+// ══════════════════════════════════════════
+//  7 monomers: L S L S L S L
+//  L = Long IRP (tall, no hinge)
+//  S = Short IRP (short, has hinge on top)
+//  Hinge on S clashes with neighboring L
+// ══════════════════════════════════════════
+
+const N = 7;
+const MONO_W = 62;
+const LONG_H = 150;     // tall monomer
+const SHORT_H = 55;     // short monomer
+const SKEW_L = 30;      // skew for long
+const SKEW_S = 18;      // skew for short
+
+const SEG_W = 80;
+const SCAF_Y = 510, SCAF_H = 16;
+const START_X = 50;
+
+// Hinge on short monomers
+const HB_W = MONO_W, HB_H = 55;
+const ARM_W = MONO_W - 4, ARM_H = 75;
+const OPEN_ANG = -50;
+
+const BEND_PER_JOINT = 3.5;
+
+let state = 'closed', busy = false;
+
+function mk(t, a) {
+  const e = document.createElementNS(NS, t);
+  for (const [k, v] of Object.entries(a)) e.setAttribute(k, v);
+  return e;
+}
+
+function isLong(i) { return i % 2 === 0; }
+
+// Info
+const info = mk('text', {x:'430', y:'22', 'text-anchor':'middle', 'font-size':'13', fill:'#64748b', 'font-family':'system-ui'});
+info.textContent = 'Closed — press UV to open hinges on short monomers.';
+svg.appendChild(info);
+
+// Light rays
+const uvR = mk('g', {opacity:'0'});
+const blR = mk('g', {opacity:'0'});
+for (let i = 0; i < 15; i++) {
+  const x = 15 + i * 56;
+  uvR.appendChild(mk('line', {x1:x, y1:32, x2:x+2, y2:50, stroke:'#a855f7', 'stroke-width':'1.2', opacity:'.5'}));
+  blR.appendChild(mk('line', {x1:x, y1:32, x2:x+2, y2:50, stroke:'#3b82f6', 'stroke-width':'1.2', opacity:'.5'}));
+}
+svg.appendChild(uvR); svg.appendChild(blR);
+
+// Chain
+const chainG = mk('g', {id:'chain'});
+svg.appendChild(chainG);
+
+const jointGs = [];
+const armEls = [];
+const clashEls = [];
+
+function buildSegment(parent, index, jointX) {
+  const isL = isLong(index);
+  const monoH = isL ? LONG_H : SHORT_H;
+  const skew = isL ? SKEW_L : SKEW_S;
+  const fillColor = isL ? '#f87171' : '#fca5a5';
+  const strokeColor = isL ? '#dc2626' : '#f87171';
+  const innerColor = isL ? '#fca5a5' : '#fde8e8';
+
+  const isFirst = (index === 0);
+  const isLast = (index === N - 1);
+  const extraL = isFirst ? 25 : 0;
+  const extraR = isLast ? 25 : 0;
+
+  // Scaffold segment
+  parent.appendChild(mk('rect', {
+    x: jointX - extraL, y: SCAF_Y, width: SEG_W + extraL + extraR, height: SCAF_H,
+    rx: '0', fill: '#ef4444', stroke: '#dc2626', 'stroke-width': '1'
+  }));
+
+  // Monomer center
+  const monoCX = jointX + SEG_W / 2;
+
+  // Parallelogram
+  const bL = monoCX - MONO_W / 2;
+  const bR = monoCX + MONO_W / 2;
+  const tL = bL + skew;
+  const tR = bR + skew;
+  const topY = SCAF_Y - monoH;
+
+  parent.appendChild(mk('polygon', {
+    points: `${bL},${SCAF_Y} ${tL},${topY} ${tR},${topY} ${bR},${SCAF_Y}`,
+    fill: fillColor, stroke: strokeColor, 'stroke-width': '1.8'
+  }));
+  // Inner
+  const ins = 5, inSkew = skew * (monoH - ins*2) / monoH;
+  parent.appendChild(mk('polygon', {
+    points: `${bL+ins},${SCAF_Y-ins} ${bL+ins+inSkew},${topY+ins} ${bR-ins+inSkew},${topY+ins} ${bR-ins},${SCAF_Y-ins}`,
+    fill: innerColor, opacity: '.3'
+  }));
+
+  // Label
+  if (index < 3) {
+    parent.appendChild(mk('text', {
+      x: monoCX + skew/2, y: SCAF_Y - monoH/2 + 4,
+      'text-anchor': 'middle', 'font-size': isL ? '11' : '9',
+      fill: isL ? '#991b1b' : '#b91c1c', 'font-weight': '500', 'font-family': 'system-ui',
+      opacity: '.6'
+    })).textContent = isL ? 'Long' : 'Short';
+  }
+
+  // ── Hinge ONLY on short monomers ──
+  if (!isL) {
+    const topCX = (tL + tR) / 2;
+    const topCY = topY;
+    const HGAP = 10;
+    const hBaseBot = topCY - HGAP;
+    const hBaseTop = hBaseBot - HB_H;
+
+    // Connection stub
+    parent.appendChild(mk('line', {
+      x1: topCX, y1: topCY, x2: topCX, y2: hBaseBot,
+      stroke: '#1d4ed8', 'stroke-width': '4', 'stroke-linecap': 'round'
+    }));
+
+    // Base
+    parent.appendChild(mk('rect', {
+      x: topCX - HB_W/2, y: hBaseTop, width: HB_W, height: HB_H, rx: '3',
+      fill: '#2563EB', stroke: '#1d4ed8', 'stroke-width': '1.2'
+    }));
+
+    const pvX = topCX, pvY = hBaseTop;
+
+    // Arm
+    const armG = mk('g', {});
+    armG.style.transformOrigin = `${pvX}px ${pvY}px`;
+    armG.style.transform = 'rotate(0deg)';
+    armG.style.transition = 'transform 0.8s ease';
+
+    armG.appendChild(mk('rect', {
+      x: pvX - ARM_W/2, y: pvY - ARM_H, width: ARM_W, height: ARM_H, rx: '3',
+      fill: '#2563EB', stroke: '#1d4ed8', 'stroke-width': '1.2'
+    }));
+    armG.appendChild(mk('path', {
+      d: `M${pvX-ARM_W/2} ${pvY-ARM_H} L${pvX} ${pvY-ARM_H-10} L${pvX+ARM_W/2} ${pvY-ARM_H}`,
+      fill: '#60a5fa', stroke: '#1d4ed8', 'stroke-width': '1'
+    }));
+    armG.appendChild(mk('path', {
+      d: `M${pvX-ARM_W/2-2} ${pvY-12} L${pvX-ARM_W/2-16} ${pvY} L${pvX-ARM_W/2-2} ${pvY+12}`,
+      fill: 'none', stroke: '#DC2626', 'stroke-width': '3.5',
+      'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+    }));
+
+    parent.appendChild(armG);
+    armEls.push({el: armG, pvX, pvY, topCX, index});
+  }
+
+  // ── Clash indicators ──
+  // Short monomer's hinge clashes with neighboring long monomers
+  if (!isL) {
+    // The short monomer is between two long ones
+    // Clash on LEFT (between this hinge and previous long monomer)
+    if (index > 0) {
+      const prevTopY = SCAF_Y - LONG_H;
+      const topCX = (tL + tR) / 2;
+      const clX = jointX + 5;
+      const clY = prevTopY + 15;
+      const cg = buildClash(clX, clY);
+      parent.appendChild(cg);
+      clashEls.push(cg);
+    }
+    // (RIGHT clash removed — arm swings left, no collision on right side)
+  }
+
+  // ── Joint to next ──
+  if (index < N - 1) {
+    const nextJointX = jointX + SEG_W;
+
+    // Black divider
+    parent.appendChild(mk('rect', {
+      x: nextJointX - 4, y: SCAF_Y - 2, width: 8, height: SCAF_H + 4,
+      rx: '1', fill: '#111'
+    }));
+
+    const jg = mk('g', {});
+    jg.style.transformOrigin = `${nextJointX}px ${SCAF_Y + SCAF_H/2}px`;
+    jg.style.transform = 'rotate(0deg)';
+    jg.style.transition = 'transform 1.2s cubic-bezier(.25,.46,.45,.94)';
+    parent.appendChild(jg);
+    jointGs.push(jg);
+
+    buildSegment(jg, index + 1, nextJointX);
+  }
+}
+
+function buildClash(cx, cy) {
+  const cg = mk('g', {opacity: '0'});
+  const spikes = 10, oR = 18, iR = 7;
+  let pts = '';
+  for (let s = 0; s < spikes * 2; s++) {
+    const an = (s * Math.PI / spikes) - Math.PI / 2;
+    const r = s % 2 === 0 ? oR : iR;
+    pts += `${cx + r * Math.cos(an)},${cy + r * Math.sin(an)} `;
+  }
+  cg.appendChild(mk('polygon', {points: pts.trim(), fill: '#ef4444', opacity: '.9'}));
+  cg.appendChild(mk('circle', {cx, cy, r: '6', fill: '#fbbf24', opacity: '.9'}));
+  cg.appendChild(mk('circle', {cx, cy, r: '3', fill: '#fff', opacity: '.8'}));
+  for (let a = 0; a < 360; a += 45) {
+    const rad = a * Math.PI / 180;
+    cg.appendChild(mk('line', {
+      x1: cx+(oR+1)*Math.cos(rad), y1: cy+(oR+1)*Math.sin(rad),
+      x2: cx+(oR+7)*Math.cos(rad), y2: cy+(oR+7)*Math.sin(rad),
+      stroke: '#ef4444', 'stroke-width': '2', 'stroke-linecap': 'round'
+    }));
+  }
+  return cg;
+}
+
+buildSegment(chainG, 0, START_X);
+
+// ── Bending ──
+function applyBend(f) {
+  jointGs.forEach(jg => {
+    jg.style.transform = `rotate(${f * BEND_PER_JOINT}deg)`;
+  });
+}
+
+// ── Controls ──
+function setPill(t, c) {
+  const p = document.getElementById('pill');
+  p.textContent = t;
+  p.className = 'pill' + (c ? ' ' + c : '');
+}
+
+function goUV() {
+  if (busy || state !== 'closed') return;
+  busy = true;
+  document.getElementById('btn-uv').disabled = true;
+  document.getElementById('btn-bl').disabled = true;
+  uvR.style.transition = 'opacity .4s'; uvR.style.opacity = '1';
+  blR.style.transition = 'opacity .3s'; blR.style.opacity = '0';
+  info.textContent = 'UV → hinge arms on short monomers swing open...';
+  setPill('Opening...', 'uv');
+
+  armEls.forEach(h => { h.el.style.transform = `rotate(${OPEN_ANG}deg)`; });
+
+  setTimeout(() => {
+    clashEls.forEach((c, i) => {
+      setTimeout(() => { c.style.transition = 'opacity .15s'; c.setAttribute('opacity', '1'); }, i * 60);
+    });
+    info.textContent = 'Hinge arms clash with tall neighbors → bending!';
+    setPill('Clash → Bending...', 'uv');
+
+    setTimeout(() => {
+      applyBend(1);
+      setTimeout(() => {
+        state = 'open'; busy = false;
+        document.getElementById('btn-bl').disabled = false;
+        clashEls.forEach(c => { c.style.transition = 'opacity .5s'; c.setAttribute('opacity', '.55'); });
+        info.textContent = 'Fiber bent — short hinge arms push against long monomers.';
+        setPill('Bent — Blue to reverse', 'uv');
+      }, 1400);
+    }, 350);
+  }, 900);
+}
+
+function goBlue() {
+  if (busy || state !== 'open') return;
+  busy = true;
+  document.getElementById('btn-uv').disabled = true;
+  document.getElementById('btn-bl').disabled = true;
+  blR.style.transition = 'opacity .4s'; blR.style.opacity = '1';
+  uvR.style.transition = 'opacity .3s'; uvR.style.opacity = '0';
+  info.textContent = 'Blue → arms closing → straightening...';
+  setPill('Closing...', 'bl');
+
+  clashEls.forEach(c => { c.style.transition = 'opacity .3s'; c.setAttribute('opacity', '0'); });
+  armEls.forEach(h => { h.el.style.transform = 'rotate(0deg)'; });
+
+  setTimeout(() => {
+    applyBend(0);
+    setPill('Straightening...', 'bl');
+    setTimeout(() => {
+      state = 'closed'; busy = false;
+      document.getElementById('btn-uv').disabled = false;
+      blR.style.transition = 'opacity .5s'; blR.style.opacity = '0';
+      info.textContent = 'Closed — press UV to open hinges on short monomers.';
+      setPill('Ready', '');
+    }, 1400);
+  }, 700);
+}
+
+function goReset() {
+  busy = false; state = 'closed';
+  uvR.style.transition = 'opacity .2s'; uvR.style.opacity = '0';
+  blR.style.transition = 'opacity .2s'; blR.style.opacity = '0';
+  armEls.forEach(h => { h.el.style.transition = 'transform .3s'; h.el.style.transform = 'rotate(0deg)'; });
+  clashEls.forEach(c => { c.style.transition = 'none'; c.setAttribute('opacity', '0'); });
+  jointGs.forEach(jg => { jg.style.transition = 'transform .3s'; jg.style.transform = 'rotate(0deg)'; });
+  document.getElementById('btn-uv').disabled = false;
+  document.getElementById('btn-bl').disabled = true;
+  info.textContent = 'Closed — press UV to open hinges on short monomers.';
+  setPill('Ready', '');
+}
+</script>
+</body>
+</html>

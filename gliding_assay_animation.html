@@ -1,0 +1,332 @@
+<style>
+  .cr{display:flex;align-items:center;gap:10px;margin:10px 0 0;flex-wrap:wrap}
+  .cr button{min-width:120px;padding:7px 14px;font-size:13px}
+  .cr button.on-uv{background:#F3E8FF;color:#7C3AED;border-color:#C4B5FD}
+  .cr button.on-bl{background:#E6F1FB;color:#185FA5;border-color:#85B7EB}
+  .pl{display:inline-block;font-size:12px;padding:3px 10px;border-radius:var(--border-radius-md);font-weight:500;background:var(--color-background-secondary);color:var(--color-text-secondary)}
+</style>
+
+<svg width="100%" viewBox="0 0 680 380">
+  <defs>
+    <linearGradient id="cyl" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#c8eac3"/>
+      <stop offset="50%" stop-color="#8dc485"/>
+    </linearGradient>
+    <radialGradient id="pab-grad">
+      <stop offset="0%" stop-color="#FFE066"/>
+      <stop offset="100%" stop-color="#F5B800"/>
+    </radialGradient>
+  </defs>
+
+  <text class="ts" id="info" x="340" y="16" text-anchor="middle">Hinges open, arms away from fusion protein. Press Blue to start.</text>
+
+  <g id="uv-rays" opacity="0"></g>
+  <g id="bl-rays" opacity="0"></g>
+
+  <!-- Explosion clash indicators (hidden) -->
+  <g id="clash-indicators" opacity="0"></g>
+
+  <g id="movable">
+    <!-- Filament bar -->
+    <rect x="10" y="100" width="600" height="36" rx="0" fill="url(#cyl)"/>
+    <rect x="10" y="100" width="600" height="36" rx="0" fill="none" stroke="#6aaa5e" stroke-width="1"/>
+    <ellipse cx="610" cy="118" rx="14" ry="18" fill="#8dc485" stroke="#6aaa5e" stroke-width="1"/>
+    <ellipse cx="10" cy="118" rx="14" ry="18" fill="url(#cyl)" stroke="#6aaa5e" stroke-width="1"/>
+    <text class="ts" x="310" y="123" text-anchor="middle" fill="#2a5c24" font-weight="500">Filament</text>
+    <!-- Fusion arms (green) + PAB circles drawn by JS -->
+    <g id="binders"></g>
+  </g>
+
+  <g id="hinges"></g>
+
+  <!-- Slide surface -->
+  <rect x="30" y="272" width="620" height="14" rx="3" fill="var(--color-background-secondary)" stroke="var(--color-border-secondary)" stroke-width="0.5"/>
+  <text class="ts" x="340" y="283" text-anchor="middle">Slide</text>
+
+  <!-- Legend -->
+  <g transform="translate(20,308)">
+    <rect x="0" y="0" width="10" height="18" rx="1" fill="#2563EB"/>
+    <rect x="2" y="-6" width="8" height="14" rx="1" fill="#2563EB" transform="rotate(-25 6 1)"/>
+    <text class="ts" x="16" y="12">Hinge</text>
+
+    <rect x="62" y="2" width="14" height="12" rx="0" fill="url(#cyl)" stroke="#6aaa5e" stroke-width="0.5"/>
+    <line x1="69" y1="14" x2="69" y2="22" stroke="#5a9e52" stroke-width="3"/>
+    <circle cx="69" cy="26" r="5" fill="url(#pab-grad)" stroke="#B8860B" stroke-width="0.8"/>
+    <text class="ts" x="82" y="12">Filament + Fusion protein</text>
+
+    <path d="M260 2 Q256 10 263 16" fill="none" stroke="#DC2626" stroke-width="1.5"/>
+    <text class="ts" x="270" y="12">Azobenzene</text>
+
+    <!-- Explosion mini icon -->
+    <g transform="translate(345,8)">
+      <polygon points="0,-7 2,-3 7,-4 3,0 6,5 1,3 -2,7 -2,2 -7,3 -3,0 -5,-5 -1,-2" fill="#FF4444" opacity="0.9"/>
+    </g>
+    <text class="ts" x="359" y="12">Clash</text>
+
+    <line x1="400" y1="8" x2="413" y2="8" stroke="#A855F7" stroke-width="2"/>
+    <text class="ts" x="419" y="12">UV</text>
+    <line x1="445" y1="8" x2="458" y2="8" stroke="#378ADD" stroke-width="2"/>
+    <text class="ts" x="464" y="12">Blue</text>
+  </g>
+</svg>
+
+<div class="cr">
+  <button id="b-bl" onclick="goBlue()">Blue light (close → clash → push)</button>
+  <button id="b-uv" onclick="goUV()">UV light (open → release → advance)</button>
+  <button onclick="goReset()">Reset</button>
+  <span id="pl" class="pl">Ready</span>
+</div>
+
+<script>
+const NS='http://www.w3.org/2000/svg';
+const N=6, GAP=82, X0=80;
+const SLIDE_Y=272;
+const FIL_Y=100, FIL_H=36, FIL_BOT=FIL_Y+FIL_H; // 136
+
+// Hinge geometry
+const BASE_H=52, BASE_TOP=SLIDE_Y-BASE_H; // 220
+const OPEN_ANG=-28;
+
+// PAB (fusion protein) — lowered to hinge center area (near pivot)
+const PAB_R=12;
+const PAB_CY=216; // near pivot (220), hinge center area
+const PAB_BOT=PAB_CY+PAB_R; // 228
+const PAB_TOP=PAB_CY-PAB_R; // 204
+
+const ARM_W=18;
+const ARM_VIS_H=36; // visual arm height (tip at 220-36=184)
+
+const BLUE_PUSH=65;
+const UV_ADVANCE=GAP-BLUE_PUSH;
+
+let offset=0, busy=false, phase='bound';
+
+function mk(t,a){const e=document.createElementNS(NS,t);for(const[k,v]of Object.entries(a))e.setAttribute(k,v);return e}
+
+function rays(id,col){
+  const g=document.getElementById(id);g.innerHTML='';
+  for(let i=0;i<10;i++){
+    const x=40+i*65;
+    g.appendChild(mk('line',{x1:x,y1:24,x2:x+3,y2:46,stroke:col,'stroke-width':'1',opacity:'0.4'}));
+  }
+}
+
+// Red starburst explosion between arm tip and PAB
+function buildClashIndicators(){
+  const cg=document.getElementById('clash-indicators');cg.innerHTML='';
+  for(let i=0;i<N;i++){
+    const cx=X0+i*GAP;
+    const contactY=PAB_CY; // clash at PAB center (hinge center area)
+
+    // Starburst explosion polygon
+    const spikes=10, outerR=16, innerR=7;
+    let pts='';
+    for(let s=0;s<spikes*2;s++){
+      const ang=(s*Math.PI/spikes)-Math.PI/2;
+      const r=s%2===0?outerR:innerR;
+      pts+=`${cx+r*Math.cos(ang)},${contactY+r*Math.sin(ang)} `;
+    }
+    cg.appendChild(mk('polygon',{points:pts.trim(),fill:'#FF4444',opacity:'0.95'}));
+
+    // Inner bright core
+    cg.appendChild(mk('circle',{cx:cx,cy:contactY,r:'5',fill:'#FFAA00',opacity:'0.9'}));
+    cg.appendChild(mk('circle',{cx:cx,cy:contactY,r:'2.5',fill:'#FFFFFF',opacity:'0.8'}));
+
+    // Radiating lines
+    for(let a=0;a<360;a+=45){
+      const rad=a*Math.PI/180;
+      const x1=cx+(outerR+1)*Math.cos(rad), y1=contactY+(outerR+1)*Math.sin(rad);
+      const x2=cx+(outerR+6)*Math.cos(rad), y2=contactY+(outerR+6)*Math.sin(rad);
+      cg.appendChild(mk('line',{x1:x1,y1:y1,x2:x2,y2:y2,stroke:'#FF4444','stroke-width':'1.8','stroke-linecap':'round'}));
+    }
+  }
+}
+
+function buildHinges(open){
+  const hg=document.getElementById('hinges');hg.innerHTML='';
+  for(let i=0;i<N;i++){
+    const cx=X0+i*GAP;
+    const ug=mk('g',{class:'hu'});
+
+    // Base (fixed on slide)
+    const bW=20;
+    ug.appendChild(mk('rect',{x:cx-bW/2,y:BASE_TOP,width:bW,height:BASE_H,rx:'2',fill:'#2563EB',stroke:'#1d4ed8','stroke-width':'0.8'}));
+
+    // Top arm (rotating part)
+    const pY=BASE_TOP; // pivot at top of base
+    const tG=mk('g',{class:'ta'});
+    tG.style.transition='transform 0.8s ease';
+    tG.style.transformOrigin=`${cx}px ${pY}px`;
+    tG.style.transform=open?`rotate(${OPEN_ANG}deg)`:'rotate(0deg)';
+
+    // Arm body — extends from pivot upward
+    tG.appendChild(mk('rect',{x:cx-ARM_W/2,y:pY-ARM_VIS_H,width:ARM_W,height:ARM_VIS_H,rx:'2',fill:'#2563EB',stroke:'#1d4ed8','stroke-width':'0.8'}));
+
+    // Pointed tip at top of arm
+    tG.appendChild(mk('path',{d:`M${cx-ARM_W/2} ${pY-ARM_VIS_H} L${cx} ${pY-ARM_VIS_H-6} L${cx+ARM_W/2} ${pY-ARM_VIS_H}`,fill:'#60a5fa',stroke:'#1d4ed8','stroke-width':'0.8'}));
+
+    // Azobenzene — left-side chevron at pivot, bridging arm (above) and base (below)
+    // Chevron spans from a few px above pivot to a few px below pivot
+    const azoTop=pY-6;   // extends into arm region
+    const azoBot=pY+6;   // extends into base region
+    const azoMidX=cx-ARM_W/2-8; // chevron tip sticks out left
+    tG.appendChild(mk('path',{
+      d:`M${cx-ARM_W/2-1} ${azoTop} L${azoMidX} ${pY} L${cx-ARM_W/2-1} ${azoBot}`,
+      fill:'none',stroke:'#DC2626','stroke-width':'2.5','stroke-linecap':'round','stroke-linejoin':'round'
+    }));
+
+    ug.appendChild(tG);
+    hg.appendChild(ug);
+  }
+}
+
+function buildBinders(){
+  const bg=document.getElementById('binders');bg.innerHTML='';
+  for(let i=0;i<N;i++){
+    const cx=X0+i*GAP;
+
+    // Thick green arm connecting filament down to PAB (near hinge center)
+    bg.appendChild(mk('line',{x1:cx,y1:FIL_BOT,x2:cx,y2:PAB_TOP+2,stroke:'#5a9e52','stroke-width':'6','stroke-linecap':'round'}));
+    // Darker overlay for depth
+    bg.appendChild(mk('line',{x1:cx,y1:FIL_BOT,x2:cx,y2:PAB_TOP+2,stroke:'#3d7a36','stroke-width':'6','stroke-linecap':'round',opacity:'0.25'}));
+
+    // PAB circle (fusion protein) - no text label
+    bg.appendChild(mk('circle',{cx:cx,cy:PAB_CY,r:PAB_R,fill:'url(#pab-grad)',stroke:'#B8860B','stroke-width':'1.5'}));
+  }
+}
+
+function pill(t,c){
+  const p=document.getElementById('pl');p.textContent=t;
+  p.style.background=c==='uv'?'#F3E8FF':c==='bl'?'#E6F1FB':'var(--color-background-secondary)';
+  p.style.color=c==='uv'?'#7C3AED':c==='bl'?'#185FA5':'var(--color-text-secondary)';
+}
+
+function animMove(dist,dur,cb){
+  let start=null;const from=offset;
+  function step(ts){
+    if(!start)start=ts;
+    const p=Math.min((ts-start)/dur,1);
+    const ease=p<0.5?2*p*p:(1-Math.pow(-2*p+2,2)/2);
+    offset=from+dist*ease;
+    document.getElementById('movable').setAttribute('transform',`translate(${offset},0)`);
+    if(p<1)requestAnimationFrame(step);else if(cb)cb();
+  }
+  requestAnimationFrame(step);
+}
+
+function showClash(){
+  const cg=document.getElementById('clash-indicators');
+  cg.style.transition='none';
+  cg.style.opacity='0';
+  requestAnimationFrame(()=>{
+    cg.style.transition='opacity 0.15s ease-out';
+    cg.style.opacity='1';
+  });
+  // Settle to slightly dimmer
+  setTimeout(()=>{
+    cg.style.transition='opacity 0.4s';
+    cg.style.opacity='0.75';
+  },300);
+}
+
+function hideClash(){
+  // Pure fadeOut, no scale
+  const cg=document.getElementById('clash-indicators');
+  cg.style.transition='opacity 0.8s ease-out';
+  cg.style.opacity='0';
+}
+
+function shakePABs(){
+  document.querySelectorAll('#binders circle').forEach(c=>{
+    const origStroke=c.getAttribute('stroke');
+    c.setAttribute('stroke','#FF4444');
+    c.setAttribute('stroke-width','3');
+    setTimeout(()=>{
+      c.setAttribute('stroke',origStroke||'#B8860B');
+      c.setAttribute('stroke-width','1.5');
+    },400);
+  });
+}
+
+function goBlue(){
+  if(busy||phase!=='bound')return;
+  busy=true;
+  document.getElementById('b-bl').classList.add('on-bl');
+  document.getElementById('b-uv').classList.remove('on-uv');
+  document.getElementById('uv-rays').style.transition='opacity 0.3s';
+  document.getElementById('uv-rays').style.opacity='0';
+  document.getElementById('bl-rays').style.transition='opacity 0.3s';
+  document.getElementById('bl-rays').style.opacity='1';
+  document.getElementById('info').textContent='Blue: hinge arm closing toward fusion protein...';
+  pill('Closing...','bl');
+
+  // Step 1: Arm closes
+  document.querySelectorAll('.ta').forEach(t=>{t.style.transform='rotate(0deg)'});
+
+  // Step 2: Clash → explosion
+  setTimeout(()=>{
+    showClash();
+    shakePABs();
+    pill('Clash! Pushing filament...','bl');
+    document.getElementById('info').textContent='Arm clashes with fusion protein! Force → filament pushed right';
+
+    // Step 3: Push
+    setTimeout(()=>{
+      animMove(BLUE_PUSH,1200,()=>{
+        hideClash();
+        busy=false; phase='pushed';
+        pill('Pushed! Now press UV','bl');
+        document.getElementById('info').textContent='Filament pushed. Press UV → hinge opens, filament advances.';
+      });
+    },450);
+  },800);
+}
+
+function goUV(){
+  if(busy||phase!=='pushed')return;
+  busy=true;
+  document.getElementById('b-uv').classList.add('on-uv');
+  document.getElementById('b-bl').classList.remove('on-bl');
+  document.getElementById('bl-rays').style.transition='opacity 0.3s';
+  document.getElementById('bl-rays').style.opacity='0';
+  document.getElementById('uv-rays').style.transition='opacity 0.3s';
+  document.getElementById('uv-rays').style.opacity='1';
+  document.getElementById('info').textContent='UV: hinge opens → arm swings away → filament free';
+  pill('Opening...','uv');
+
+  document.querySelectorAll('.ta').forEach(t=>{t.style.transform=`rotate(${OPEN_ANG}deg)`});
+
+  setTimeout(()=>{
+    pill('Advancing...','uv');
+    animMove(UV_ADVANCE,800,()=>{
+      busy=false; phase='bound';
+      pill('Bound! Press Blue again','uv');
+      document.getElementById('info').textContent='Fusion protein at next hinge. Press Blue → arm closes, clashes, pushes again.';
+    });
+  },600);
+}
+
+function goReset(){
+  busy=false; phase='bound'; offset=0;
+  document.getElementById('b-bl').classList.remove('on-bl');
+  document.getElementById('b-uv').classList.remove('on-uv');
+  document.getElementById('uv-rays').style.opacity='0';
+  document.getElementById('bl-rays').style.opacity='0';
+  const cg=document.getElementById('clash-indicators');
+  cg.style.transition='none'; cg.style.opacity='0';
+  document.getElementById('movable').setAttribute('transform','translate(0,0)');
+  document.getElementById('info').textContent='Hinges open, arms away from fusion protein. Press Blue to start.';
+  pill('Ready','');
+  rays('uv-rays','#A855F7');
+  rays('bl-rays','#378ADD');
+  buildHinges(true);
+  buildBinders();
+  buildClashIndicators();
+}
+
+rays('uv-rays','#A855F7');
+rays('bl-rays','#378ADD');
+buildHinges(true);
+buildBinders();
+buildClashIndicators();
+</script>
