@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IRP Cilia — Metachronal Wave via Patterned Light</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:#0a0e1a;display:flex;flex-direction:column;align-items:center;padding:16px;min-height:100vh;color:#e2e8f0}
+  h1{font-size:17px;font-weight:600;color:#e2e8f0;margin-bottom:2px}
+  .sub{font-size:12px;color:#94a3b8;margin-bottom:10px;text-align:center;max-width:750px;line-height:1.5}
+  .stage{background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:4px;box-shadow:0 0 30px rgba(59,130,246,.08)}
+  .cr{display:flex;gap:10px;margin-top:12px;align-items:center;flex-wrap:wrap}
+  .cr button{padding:7px 16px;font-size:13px;font-weight:500;border:1.5px solid #334155;border-radius:8px;cursor:pointer;background:#1e293b;color:#e2e8f0;transition:all .15s}
+  .cr button:hover{background:#334155}
+  .cr button.active{border-color:#a855f7;background:#2e1065;color:#c084fc}
+  .pill{font-size:11px;padding:3px 10px;border-radius:6px;background:#1e293b;color:#94a3b8;font-weight:500}
+  .pill.on{background:#2e1065;color:#c084fc}
+  .legend{display:flex;gap:14px;margin-top:8px;flex-wrap:wrap}
+  .legend span{display:flex;align-items:center;gap:4px;font-size:11px;color:#94a3b8}
+  .slider-row{display:flex;gap:12px;align-items:center;margin-top:8px}
+  .slider-row label{font-size:11px;color:#94a3b8;min-width:90px}
+  .slider-row input[type=range]{width:140px;accent-color:#a855f7}
+  .slider-row .val{font-size:11px;color:#c084fc;min-width:40px}
+</style>
+</head>
+<body>
+
+<h1>Metachronal Wave — Patterned UV/Blue Light on Protein Cilia</h1>
+<p class="sub">격자무늬 UV/Blue 패턴이 오른쪽으로 이동 → 순차적 cilia bending → metachronal wave → directional fluid flow</p>
+
+<div class="stage"><canvas id="cv" width="950" height="520"></canvas></div>
+
+<div class="cr">
+  <button id="btn-start" onclick="toggleWave()">▶ Start Wave</button>
+  <button onclick="resetAll()">↺ Reset</button>
+  <span id="pill" class="pill">Ready</span>
+</div>
+
+<div class="slider-row">
+  <label>Wave Speed</label>
+  <input type="range" id="sl-speed" min="10" max="120" value="40" oninput="updateSpeed()">
+  <span class="val" id="v-speed">40</span>
+</div>
+<div class="slider-row">
+  <label>Stripe Width</label>
+  <input type="range" id="sl-stripe" min="2" max="8" value="4" oninput="updateStripe()">
+  <span class="val" id="v-stripe">4</span>
+</div>
+
+<div class="legend">
+  <span><svg width="14" height="14"><rect width="14" height="14" rx="2" fill="rgba(168,85,247,0.3)"/></svg> UV zone (bend)</span>
+  <span><svg width="14" height="14"><rect width="14" height="14" rx="2" fill="rgba(59,130,246,0.2)"/></svg> Blue zone (relax)</span>
+  <span><svg width="14" height="14"><line x1="7" y1="14" x2="7" y2="2" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round"/></svg> Cilium</span>
+  <span><svg width="14" height="14"><path d="M2 7 Q7 3 12 7" fill="none" stroke="#60a5fa" stroke-width="1.5"/></svg> Fluid Flow</span>
+</div>
+
+<script>
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const W = cv.width, H = cv.height;
+
+// ── Layout ──
+const SURFACE_Y = 400;
+const NUM_CILIA = 30;
+const CILIA_START_X = 25;
+const CILIA_SPACING = 30;
+const CILIUM_SEGS = 10;
+const CILIUM_THICK = 2.2;
+
+let running = false;
+let time = 0;
+let waveOffset = 0;       // current stripe offset in cilia-index units
+let waveSpeed = 40;       // pixels per second stripe shift
+let stripeWidth = 4;      // how many cilia per stripe half-cycle
+
+// Cilia
+let cilia = [];
+function initCilia() {
+  cilia = [];
+  for (let i = 0; i < NUM_CILIA; i++) {
+    cilia.push({
+      x: CILIA_START_X + i * CILIA_SPACING,
+      len: 100 + (Math.random() - 0.5) * 16,
+      phase: Math.random() * 0.2,
+      color: `hsl(${355 + Math.random()*15}, ${70+Math.random()*15}%, ${55+Math.random()*10}%)`
+    });
+  }
+}
+initCilia();
+
+// Beads
+const NUM_BEADS = 14;
+const BEAD_R_MIN = 2.5, BEAD_R_MAX = 5;
+let beads = [];
+function initBeads() {
+  beads = [];
+  for (let i = 0; i < NUM_BEADS; i++) {
+    const sx = Math.random() * (W - 40) + 20;
+    const sy = SURFACE_Y - 30 - Math.random() * 250;
+    beads.push({
+      x: sx, y: sy,
+      r: BEAD_R_MIN + Math.random() * (BEAD_R_MAX - BEAD_R_MIN),
+      vx: 0, vy: 0,
+      brightness: 0.7 + Math.random() * 0.3,
+      phase: Math.random() * Math.PI * 2
+    });
+  }
+}
+initBeads();
+
+// ── Bend amount per cilium ──
+function getCiliaBend(index) {
+  if (!running) return 0;
+  // Stripe pattern: sine wave based on index offset
+  // UV zones = positive sine → bend, Blue zones = negative sine → relax
+  const pos = (index - waveOffset) / stripeWidth;
+  const raw = Math.sin(pos * Math.PI);
+  return Math.max(0, raw); // 0 to 1, only bend (no negative)
+}
+
+function isUVzone(index) {
+  if (!running) return false;
+  const pos = (index - waveOffset) / stripeWidth;
+  return Math.sin(pos * Math.PI) > 0;
+}
+
+// ── Drawing ──
+function drawBackground() {
+  ctx.fillStyle = '#0a1628';
+  ctx.fillRect(0, 0, W, H);
+
+  const grd = ctx.createLinearGradient(0, 0, 0, SURFACE_Y);
+  grd.addColorStop(0, 'rgba(30,58,138,0.06)');
+  grd.addColorStop(1, 'rgba(30,58,138,0.15)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, W, SURFACE_Y);
+
+  // Surface
+  const sgrd = ctx.createLinearGradient(0, SURFACE_Y, 0, H);
+  sgrd.addColorStop(0, '#57534e');
+  sgrd.addColorStop(0.3, '#44403c');
+  sgrd.addColorStop(1, '#292524');
+  ctx.fillStyle = sgrd;
+  ctx.fillRect(0, SURFACE_Y, W, H - SURFACE_Y);
+
+  ctx.strokeStyle = '#78716c';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, SURFACE_Y);
+  ctx.lineTo(W, SURFACE_Y);
+  ctx.stroke();
+
+  ctx.fillStyle = '#a8a29e';
+  ctx.font = '11px system-ui';
+  ctx.textAlign = 'center';
+  ctx.fillText('Glass Surface', W/2, SURFACE_Y + 35);
+}
+
+function drawLightStripes() {
+  if (!running) return;
+
+  for (let i = 0; i < NUM_CILIA; i++) {
+    const cx = cilia[i].x;
+    const halfW = CILIA_SPACING / 2;
+    const uv = isUVzone(i);
+    const bend = getCiliaBend(i);
+
+    if (uv && bend > 0.05) {
+      // UV stripe
+      const alpha = 0.06 + bend * 0.12;
+      ctx.fillStyle = `rgba(168,85,247,${alpha})`;
+      ctx.fillRect(cx - halfW, 0, CILIA_SPACING, SURFACE_Y);
+
+      // Light rays
+      const rayAlpha = 0.1 + bend * 0.15;
+      ctx.strokeStyle = `rgba(168,85,247,${rayAlpha})`;
+      ctx.lineWidth = 1;
+      for (let r = 0; r < 3; r++) {
+        const rx = cx - 8 + r * 10;
+        ctx.beginPath();
+        ctx.moveTo(rx, 0);
+        ctx.lineTo(rx + 2, 30);
+        ctx.stroke();
+      }
+    } else {
+      // Blue zone (subtle)
+      ctx.fillStyle = 'rgba(59,130,246,0.03)';
+      ctx.fillRect(cx - halfW, 0, CILIA_SPACING, SURFACE_Y);
+    }
+  }
+
+  // Labels at top
+  ctx.font = 'bold 10px system-ui';
+  ctx.textAlign = 'center';
+  for (let i = 0; i < NUM_CILIA; i += stripeWidth) {
+    const cx = cilia[Math.min(i, NUM_CILIA-1)].x + (stripeWidth * CILIA_SPACING) / 4;
+    if (isUVzone(i)) {
+      ctx.fillStyle = 'rgba(168,85,247,0.5)';
+      ctx.fillText('UV', cx, 14);
+    }
+  }
+}
+
+function drawCilium(c, bend) {
+  const maxAngle = bend * 65 * Math.PI / 180;
+  const segLen = c.len / CILIUM_SEGS;
+  const sway = Math.sin(time * 1.2 + c.phase * 10) * 2 * (1 - bend * 0.9);
+
+  ctx.save();
+  ctx.beginPath();
+
+  let px = c.x, py = SURFACE_Y;
+  ctx.moveTo(px, py);
+
+  for (let s = 1; s <= CILIUM_SEGS; s++) {
+    const t = s / CILIUM_SEGS;
+    const angle = -Math.PI/2 + maxAngle * t * t + sway * t * Math.PI / 180;
+    px += segLen * Math.cos(angle);
+    py += segLen * Math.sin(angle);
+    ctx.lineTo(px, py);
+  }
+
+  // Color shifts with bend
+  const r = 239, g = Math.round(68 + (1-bend)*50), b = Math.round(68 + (1-bend)*50);
+  ctx.strokeStyle = `rgb(${r},${g},${b})`;
+  ctx.lineWidth = CILIUM_THICK;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+
+  // Anchor
+  ctx.fillStyle = '#a8a29e';
+  ctx.beginPath();
+  ctx.arc(c.x, SURFACE_Y, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawFlowArrows() {
+  if (!running) return;
+  // Average bend for flow strength
+  let avgBend = 0;
+  for (let i = 0; i < NUM_CILIA; i++) avgBend += getCiliaBend(i);
+  avgBend /= NUM_CILIA;
+
+  if (avgBend < 0.05) return;
+
+  const alpha = Math.min(0.5, avgBend * 1.2);
+  ctx.save();
+  ctx.strokeStyle = `rgba(96,165,250,${alpha})`;
+  ctx.fillStyle = `rgba(96,165,250,${alpha})`;
+  ctx.lineWidth = 1.2;
+
+  const flowSpeed = time * 30;
+  const levels = [SURFACE_Y - 40, SURFACE_Y - 90, SURFACE_Y - 150, SURFACE_Y - 210];
+
+  for (const fy of levels) {
+    for (let i = 0; i < 5; i++) {
+      const fx = ((i * 190 + flowSpeed) % (W + 80)) - 40;
+      const wavY = fy + Math.sin(fx * 0.015 + time) * 5;
+      ctx.beginPath();
+      ctx.moveTo(fx, wavY);
+      ctx.lineTo(fx + 22, wavY);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(fx + 22, wavY);
+      ctx.lineTo(fx + 17, wavY - 3);
+      ctx.lineTo(fx + 17, wavY + 3);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  ctx.font = '11px system-ui';
+  ctx.textAlign = 'right';
+  ctx.fillText('Fluid Flow →', W - 12, SURFACE_Y - 250);
+  ctx.restore();
+}
+
+function drawBeads() {
+  for (const b of beads) {
+    ctx.save();
+    const grd = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r * 3);
+    const pulse = 0.5 + 0.3 * Math.sin(time * 4 + b.phase);
+    grd.addColorStop(0, `rgba(74,222,128,${0.8 * b.brightness})`);
+    grd.addColorStop(0.4, `rgba(34,197,94,${0.4 * pulse})`);
+    grd.addColorStop(1, 'rgba(34,197,94,0)');
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, b.r * 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = `rgba(74,222,128,${b.brightness})`;
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = `rgba(255,255,255,${0.5 * b.brightness})`;
+    ctx.beginPath();
+    ctx.arc(b.x - b.r * 0.3, b.y - b.r * 0.3, b.r * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function updateBeads(dt) {
+  if (!running) {
+    // Only Brownian
+    for (const b of beads) {
+      b.vx += (Math.random() - 0.5) * 0.03;
+      b.vy += (Math.random() - 0.5) * 0.02;
+      b.vx *= 0.98; b.vy *= 0.98;
+      b.x += b.vx; b.y += b.vy;
+      if (b.y > SURFACE_Y - b.r - 5) { b.y = SURFACE_Y - b.r - 5; b.vy *= -0.3; }
+      if (b.y < 25 + b.r) { b.y = 25 + b.r; b.vy *= -0.3; }
+    }
+    return;
+  }
+
+  for (const b of beads) {
+    // Find nearest cilia bend for local flow
+    let localBend = 0;
+    for (let i = 0; i < NUM_CILIA; i++) {
+      const dist = Math.abs(b.x - cilia[i].x);
+      if (dist < CILIA_SPACING * 2) {
+        localBend = Math.max(localBend, getCiliaBend(i) * (1 - dist / (CILIA_SPACING * 2)));
+      }
+    }
+
+    b.vx += (Math.random() - 0.5) * 0.03;
+    b.vy += (Math.random() - 0.5) * 0.02;
+
+    // Flow from metachronal wave (rightward)
+    const proximity = Math.max(0, 1 - (SURFACE_Y - b.y) / 300);
+    b.vx += localBend * 0.15 * (0.3 + proximity * 0.7);
+
+    b.vx *= 0.97;
+    b.vy *= 0.97;
+    b.x += b.vx;
+    b.y += b.vy;
+
+    if (b.y > SURFACE_Y - b.r - 5) { b.y = SURFACE_Y - b.r - 5; b.vy *= -0.3; }
+    if (b.y < 25 + b.r) { b.y = 25 + b.r; b.vy *= -0.3; }
+    if (b.x > W + 15) { b.x = -10; b.y = SURFACE_Y - 30 - Math.random() * 250; b.vx = 0; }
+  }
+
+  // Spawn from left
+  if (beads.length < 20 && Math.random() < 0.02) {
+    beads.push({
+      x: -5, y: SURFACE_Y - 30 - Math.random() * 250,
+      r: BEAD_R_MIN + Math.random() * (BEAD_R_MAX - BEAD_R_MIN),
+      vx: 0, vy: 0,
+      brightness: 0.7 + Math.random() * 0.3,
+      phase: Math.random() * Math.PI * 2
+    });
+  }
+}
+
+function drawWaveIndicator() {
+  // Bottom wave diagram
+  const y0 = SURFACE_Y + 55;
+  const waveW = W - 60;
+  const startX = 30;
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(168,85,247,0.4)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  for (let px = 0; px <= waveW; px++) {
+    const idx = (px / waveW) * NUM_CILIA;
+    const val = Math.sin(((idx - waveOffset) / stripeWidth) * Math.PI);
+    const y = y0 - val * 18;
+    if (px === 0) ctx.moveTo(startX + px, y);
+    else ctx.lineTo(startX + px, y);
+  }
+  ctx.stroke();
+
+  // Zero line
+  ctx.strokeStyle = 'rgba(148,163,184,0.15)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(startX, y0);
+  ctx.lineTo(startX + waveW, y0);
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(148,163,184,0.4)';
+  ctx.font = '9px system-ui';
+  ctx.textAlign = 'left';
+  ctx.fillText('bend', startX - 26, y0 - 12);
+  ctx.fillText('relax', startX - 26, y0 + 12);
+
+  // Direction arrow
+  if (running) {
+    ctx.fillStyle = 'rgba(168,85,247,0.5)';
+    ctx.font = '10px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText('wave propagation →', W/2, y0 + 32);
+  }
+
+  ctx.restore();
+}
+
+function drawInfo() {
+  ctx.fillStyle = '#64748b';
+  ctx.font = '11px system-ui';
+  ctx.textAlign = 'left';
+  if (!running) {
+    ctx.fillText('Press Start to begin metachronal wave', 15, H - 10);
+  } else {
+    ctx.fillText('Patterned UV/Blue stripes sweep right → sequential cilia bending → metachronal wave → net fluid flow', 15, H - 10);
+  }
+}
+
+function drawMicroscopeFrame() {
+  ctx.strokeStyle = 'rgba(148,163,184,0.2)';
+  ctx.lineWidth = 2;
+  const m = 6, c = 20;
+  ctx.beginPath(); ctx.moveTo(m, m+c); ctx.lineTo(m, m); ctx.lineTo(m+c, m); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(W-m-c, m); ctx.lineTo(W-m, m); ctx.lineTo(W-m, m+c); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(m, H-m-c); ctx.lineTo(m, H-m); ctx.lineTo(m+c, H-m); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(W-m-c, H-m); ctx.lineTo(W-m, H-m); ctx.lineTo(W-m, H-m-c); ctx.stroke();
+}
+
+// ── Animation Loop ──
+let lastTime = 0;
+function frame(ts) {
+  const dt = Math.min((ts - lastTime) / 1000, 0.05);
+  lastTime = ts;
+  time += dt;
+
+  if (running) {
+    waveOffset += dt * (waveSpeed / CILIA_SPACING);
+  }
+
+  updateBeads(dt);
+
+  ctx.clearRect(0, 0, W, H);
+  drawBackground();
+  drawLightStripes();
+  drawFlowArrows();
+
+  for (let i = 0; i < NUM_CILIA; i++) {
+    const bend = getCiliaBend(i);
+    drawCilium(cilia[i], bend);
+  }
+
+  drawBeads();
+  drawWaveIndicator();
+  drawMicroscopeFrame();
+  drawInfo();
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// ── Controls ──
+function toggleWave() {
+  running = !running;
+  const btn = document.getElementById('btn-start');
+  btn.textContent = running ? '⏸ Pause' : '▶ Start Wave';
+  btn.classList.toggle('active', running);
+  document.getElementById('pill').className = running ? 'pill on' : 'pill';
+  document.getElementById('pill').textContent = running ? 'Metachronal wave active' : 'Paused';
+}
+
+function resetAll() {
+  running = false;
+  waveOffset = 0;
+  time = 0;
+  initBeads();
+  document.getElementById('btn-start').textContent = '▶ Start Wave';
+  document.getElementById('btn-start').classList.remove('active');
+  document.getElementById('pill').className = 'pill';
+  document.getElementById('pill').textContent = 'Ready';
+}
+
+function updateSpeed() {
+  waveSpeed = parseInt(document.getElementById('sl-speed').value);
+  document.getElementById('v-speed').textContent = waveSpeed;
+}
+function updateStripe() {
+  stripeWidth = parseInt(document.getElementById('sl-stripe').value);
+  document.getElementById('v-stripe').textContent = stripeWidth;
+}
+</script>
+</body>
+</html>
