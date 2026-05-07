@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Protein Cilia Swimmer — Single IRP Tail</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:#0a0e1a;display:flex;flex-direction:column;align-items:center;padding:16px;min-height:100vh;color:#e2e8f0}
+  h1{font-size:17px;font-weight:600;color:#e2e8f0;margin-bottom:2px}
+  .sub{font-size:12px;color:#94a3b8;margin-bottom:10px;text-align:center;max-width:700px;line-height:1.5}
+  .stage{background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:4px;box-shadow:0 0 30px rgba(59,130,246,.08)}
+  .cr{display:flex;gap:10px;margin-top:12px;align-items:center;flex-wrap:wrap}
+  .cr button{padding:7px 16px;font-size:13px;font-weight:500;border:1.5px solid #334155;border-radius:8px;cursor:pointer;background:#1e293b;color:#e2e8f0;transition:all .15s}
+  .cr button:hover{background:#334155}
+  .cr button.active{border-color:#a855f7;background:#2e1065;color:#c084fc}
+  .pill{font-size:11px;padding:3px 10px;border-radius:6px;background:#1e293b;color:#94a3b8;font-weight:500}
+  .pill.uv{background:#2e1065;color:#c084fc}
+  .pill.bl{background:#1e3a5f;color:#60a5fa}
+  .legend{display:flex;gap:14px;margin-top:8px;flex-wrap:wrap}
+  .legend span{display:flex;align-items:center;gap:4px;font-size:11px;color:#94a3b8}
+  .track-info{font-size:11px;color:#64748b;margin-top:6px}
+</style>
+</head>
+<body>
+
+<h1>Protein Nano-Swimmer — Single IRP Cilia Tail</h1>
+<p class="sub">형광 단백질에 IRP fiber cilia 꼬리 부착 — UV → hinge open → steric clash → fiber bend → 추진</p>
+
+<div class="stage"><canvas id="cv" width="900" height="550"></canvas></div>
+
+<div class="cr">
+  <button id="btn-gnp" onclick="setBody('gnp')" class="active">🟡 Gold Nanoparticle</button>
+  <button id="btn-gfp" onclick="setBody('gfp')">🟢 GFP</button>
+  <span style="color:#334155">|</span>
+  <button id="btn-cycle" onclick="toggleCycle()">🔄 Start UV/Blue Cycle</button>
+  <button onclick="resetAll()">↺ Reset</button>
+  <button onclick="toggleTrail()">📍 Trail On/Off</button>
+  <span id="pill" class="pill">Brownian only</span>
+</div>
+
+<div class="legend">
+  <span><svg width="20" height="14"><circle cx="10" cy="7" r="6" fill="#f59e0b" stroke="#92400e" stroke-width="1"/></svg> Gold Nanoparticle (AuNP)</span>
+  <span><svg width="20" height="14"><circle cx="10" cy="7" r="6" fill="#22c55e" stroke="#16a34a" stroke-width="1"/></svg> GFP</span>
+  <span><svg width="18" height="12"><polygon points="2,12 5,0 15,0 12,12" fill="#f87171" stroke="#dc2626" stroke-width="0.8"/></svg> IRP monomer</span>
+  <span><svg width="14" height="10"><rect width="14" height="10" rx="1" fill="#2563eb" stroke="#1d4ed8" stroke-width="0.6"/></svg> Hinge</span>
+  <span><svg width="14" height="14"><rect width="14" height="4" y="5" fill="#ef4444"/></svg> Scaffold</span>
+</div>
+
+<div class="track-info" id="info">Displacement: 0 nm</div>
+
+<script>
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const W = cv.width, H = cv.height;
+
+// ── IRP Tail (from irp_hinge_bending, scaled) ──
+const TAIL_N = 5;
+const MONO_W = 16, MONO_H = 32, SKEW = 7;
+const SEG_W = 22;
+const SCAF_H = 5;
+const HB_W = MONO_W, HB_H = 14;
+const ARM_W = MONO_W - 2, ARM_H = 18;
+const OPEN_ANG = -52;       // hinge arm open angle
+const BEND_PER_JOINT = 18;   // fiber bend per joint — dramatic visible curve
+
+// ── Fluorescent body ──
+const BODY_R = 45;
+
+let swimmer = { x: W * 0.45, y: H / 2, angle: 0, vx: 0, vy: 0, angVel: 0 };
+let bodyType = 'gnp'; // 'gfp' or 'gnp'
+let time = 0;
+let trail = [];
+let showTrail = true;
+let startPos = { x: W * 0.45, y: H / 2 };
+
+// Animation state: 0 = closed/straight, 1 = open/bent
+let bendProgress = 0;
+let lightState = 'none'; // 'none', 'uv', 'blue'
+let autoCycle = false;
+let cycleTimer = 0;
+// 10 Hz = 0.1s per cycle = 0.05s UV + 0.05s Blue
+const UV_DURATION = 0.05;
+const BLUE_DURATION = 0.05;
+
+// Physics
+const BROWNIAN_FORCE = 0.25;
+const BROWNIAN_TORQUE = 0.15;
+const SWIM_FORCE = 0.02;
+const DAMPING = 0.96;
+const ANG_DAMPING = 0.82;
+
+function resetAll() {
+  swimmer = { x: W * 0.45, y: H / 2, angle: 0, vx: 0, vy: 0, angVel: 0 };
+  startPos = { x: W * 0.45, y: H / 2 };
+  trail = [];
+  bendProgress = 0;
+  lightState = 'none';
+  autoCycle = false;
+  cycleTimer = 0;
+  document.getElementById('btn-cycle').textContent = '🔄 Start UV/Blue Cycle';
+  document.getElementById('btn-cycle').classList.remove('active');
+  document.getElementById('pill').className = 'pill';
+  document.getElementById('pill').textContent = 'Brownian only';
+}
+
+function toggleCycle() {
+  autoCycle = !autoCycle;
+  const btn = document.getElementById('btn-cycle');
+  btn.classList.toggle('active', autoCycle);
+  if (autoCycle) {
+    lightState = 'uv';
+    cycleTimer = 0;
+    btn.textContent = '⏸ Stop Cycle';
+    document.getElementById('pill').className = 'pill uv';
+    document.getElementById('pill').textContent = 'UV — hinge opening';
+  } else {
+    lightState = 'none';
+    btn.textContent = '🔄 Start UV/Blue Cycle';
+    document.getElementById('pill').className = 'pill';
+    document.getElementById('pill').textContent = 'Brownian only';
+  }
+}
+
+function toggleTrail() { showTrail = !showTrail; }
+
+function setBody(type) {
+  bodyType = type;
+  document.getElementById('btn-gfp').classList.toggle('active', type === 'gfp');
+  document.getElementById('btn-gnp').classList.toggle('active', type === 'gnp');
+}
+
+// ── Update ──
+function updateLight(dt) {
+  if (!autoCycle) return;
+
+  cycleTimer += dt;
+
+  if (lightState === 'uv') {
+    bendProgress = Math.min(1, bendProgress + dt * (1 / UV_DURATION));
+    if (cycleTimer >= UV_DURATION) {
+      lightState = 'blue';
+      cycleTimer = 0;
+    }
+  } else if (lightState === 'blue') {
+    bendProgress = Math.max(0, bendProgress - dt * (1 / BLUE_DURATION));
+    if (cycleTimer >= BLUE_DURATION) {
+      lightState = 'uv';
+      cycleTimer = 0;
+    }
+  }
+  // Update pill less frequently
+  if (autoCycle && Math.floor(time * 4) % 2 === 0) {
+    document.getElementById('pill').className = lightState === 'uv' ? 'pill uv' : 'pill bl';
+    document.getElementById('pill').textContent = 'Cycling 10 Hz — swimming';
+  }
+}
+
+let prevBend = 0;
+
+function updateSwimmer(dt) {
+  // Brownian always
+  swimmer.vx += (Math.random() - 0.5) * BROWNIAN_FORCE;
+  swimmer.vy += (Math.random() - 0.5) * BROWNIAN_FORCE;
+  swimmer.angVel += (Math.random() - 0.5) * BROWNIAN_TORQUE;
+
+  // When cycling: ~5x more displacement via directed thrust
+  if (autoCycle) {
+    // Extra Brownian-like random kicks (adds to base Brownian)
+    swimmer.vx += (Math.random() - 0.5) * BROWNIAN_FORCE * 2;
+    swimmer.vy += (Math.random() - 0.5) * BROWNIAN_FORCE * 2;
+
+    // Plus directed thrust from bend change
+    const bendChange = bendProgress - prevBend;
+    prevBend = bendProgress;
+    if (Math.abs(bendChange) > 0.001) {
+      const thrustMag = bendChange > 0
+        ? SWIM_FORCE * bendChange * 50
+        : SWIM_FORCE * bendChange * 12;
+      swimmer.vx += Math.cos(swimmer.angle) * thrustMag;
+      swimmer.vy += Math.sin(swimmer.angle) * thrustMag;
+    }
+  } else {
+    prevBend = bendProgress;
+  }
+
+  swimmer.vx *= DAMPING;
+  swimmer.vy *= DAMPING;
+  swimmer.angVel *= ANG_DAMPING;
+
+  swimmer.x += swimmer.vx;
+  swimmer.y += swimmer.vy;
+  swimmer.angle += swimmer.angVel;
+
+  // Boundary
+  const m = 70;
+  if (swimmer.x < m) { swimmer.x = m; swimmer.vx *= -0.3; }
+  if (swimmer.x > W - m) { swimmer.x = W - m; swimmer.vx *= -0.3; }
+  if (swimmer.y < m) { swimmer.y = m; swimmer.vy *= -0.3; }
+  if (swimmer.y > H - m) { swimmer.y = H - m; swimmer.vy *= -0.3; }
+
+  trail.push({ x: swimmer.x, y: swimmer.y, light: lightState });
+  if (trail.length > 5000) trail.shift();
+
+  const dx = swimmer.x - startPos.x, dy = swimmer.y - startPos.y;
+  document.getElementById('info').textContent =
+    `Displacement: ${Math.round(Math.sqrt(dx*dx + dy*dy) * 2.5)} nm`;
+}
+
+// ── Drawing ──
+function drawBackground() {
+  ctx.fillStyle = '#0a1628';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.strokeStyle = 'rgba(148,163,184,0.03)';
+  ctx.lineWidth = 0.5;
+  for (let x = 0; x < W; x += 50) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  for (let y = 0; y < H; y += 50) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+
+  // Light rays
+  if (lightState === 'uv') {
+    for (let i = 0; i < 30; i++) {
+      const x = 10 + i * 30;
+      const alpha = 0.08 + 0.04 * Math.sin(time * 3 + i);
+      ctx.strokeStyle = `rgba(168,85,247,${alpha})`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x+2, 28); ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(168,85,247,0.5)';
+    ctx.font = 'bold 11px system-ui';
+    ctx.textAlign = 'left';
+    ctx.fillText('UV (365 nm)', 10, 15);
+  } else if (lightState === 'blue') {
+    for (let i = 0; i < 30; i++) {
+      const x = 10 + i * 30;
+      const alpha = 0.06 + 0.03 * Math.sin(time * 3 + i);
+      ctx.strokeStyle = `rgba(59,130,246,${alpha})`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x+2, 28); ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(59,130,246,0.5)';
+    ctx.font = 'bold 11px system-ui';
+    ctx.textAlign = 'left';
+    ctx.fillText('Blue (450 nm)', 10, 15);
+  }
+}
+
+function drawTrail() {
+  if (!showTrail || trail.length < 2) return;
+  ctx.save();
+  ctx.lineWidth = 1.5;
+  ctx.lineCap = 'round';
+  for (let i = 1; i < trail.length; i++) {
+    const alpha = (i / trail.length) * 0.5;
+    const p = trail[i];
+    ctx.strokeStyle = p.light === 'uv' ? `rgba(168,85,247,${alpha})`
+                    : p.light === 'blue' ? `rgba(59,130,246,${alpha * 0.6})`
+                    : `rgba(148,163,184,${alpha * 0.3})`;
+    ctx.beginPath();
+    ctx.moveTo(trail[i-1].x, trail[i-1].y);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawSwimmerBody() {
+  ctx.save();
+  ctx.translate(swimmer.x, swimmer.y);
+
+  if (bodyType === 'gfp') {
+    // ── GFP (green fluorescent protein) ──
+    const pulse = 0.6 + 0.3 * Math.sin(time * 3);
+    const glow = ctx.createRadialGradient(0, 0, BODY_R * 0.3, 0, 0, BODY_R * 2.5);
+    glow.addColorStop(0, `rgba(74,222,128,${0.35 * pulse})`);
+    glow.addColorStop(0.5, `rgba(34,197,94,${0.12 * pulse})`);
+    glow.addColorStop(1, 'rgba(34,197,94,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(0, 0, BODY_R * 2.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(0, 0, BODY_R, 0, Math.PI * 2);
+    const bodyGrd = ctx.createRadialGradient(-8, -8, 4, 0, 0, BODY_R);
+    bodyGrd.addColorStop(0, '#bbf7d0');
+    bodyGrd.addColorStop(0.3, '#86efac');
+    bodyGrd.addColorStop(0.7, '#22c55e');
+    bodyGrd.addColorStop(1, '#15803d');
+    ctx.fillStyle = bodyGrd;
+    ctx.fill();
+    ctx.strokeStyle = '#166534';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.beginPath();
+    ctx.arc(-12, -12, BODY_R * 0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = 'bold 11px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText('GFP', 0, 4);
+
+  } else {
+    // ── Gold Nanoparticle ──
+    // Warm golden glow (surface plasmon resonance)
+    const pulse = 0.5 + 0.2 * Math.sin(time * 2.5);
+    const glow = ctx.createRadialGradient(0, 0, BODY_R * 0.3, 0, 0, BODY_R * 2.5);
+    glow.addColorStop(0, `rgba(251,191,36,${0.3 * pulse})`);
+    glow.addColorStop(0.4, `rgba(245,158,11,${0.12 * pulse})`);
+    glow.addColorStop(1, 'rgba(245,158,11,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(0, 0, BODY_R * 2.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(0, 0, BODY_R, 0, Math.PI * 2);
+    const bodyGrd = ctx.createRadialGradient(-8, -8, 4, 0, 0, BODY_R);
+    bodyGrd.addColorStop(0, '#fef3c7');
+    bodyGrd.addColorStop(0.2, '#fcd34d');
+    bodyGrd.addColorStop(0.5, '#f59e0b');
+    bodyGrd.addColorStop(0.8, '#b45309');
+    bodyGrd.addColorStop(1, '#78350f');
+    ctx.fillStyle = bodyGrd;
+    ctx.fill();
+    ctx.strokeStyle = '#92400e';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Metallic highlight
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.beginPath();
+    ctx.arc(-10, -10, BODY_R * 0.28, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.beginPath();
+    ctx.arc(6, -8, BODY_R * 0.12, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font = 'bold 10px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText('AuNP', 0, 4);
+  }
+
+  ctx.restore();
+}
+
+function drawIRPTail() {
+  ctx.save();
+  ctx.translate(swimmer.x, swimmer.y);
+  ctx.rotate(swimmer.angle + Math.PI); // tail opposite to heading
+
+  // Start from body edge
+  ctx.translate(BODY_R + 2, 0);
+
+  // Connection line from body to first scaffold
+  ctx.strokeStyle = '#ef4444';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-2, 0);
+  ctx.lineTo(3, 0);
+  ctx.stroke();
+
+  // Draw chain: each segment rotates at joint (like irp_hinge_bending)
+  for (let i = 0; i < TAIL_N; i++) {
+    if (i > 0) {
+      // Joint rotation — same as irp_hinge_bending chain structure
+      const bendAngle = bendProgress * BEND_PER_JOINT * Math.PI / 180;
+      ctx.rotate(bendAngle);
+    }
+
+    // ── Scaffold ──
+    ctx.fillStyle = '#ef4444';
+    ctx.strokeStyle = '#dc2626';
+    ctx.lineWidth = 0.8;
+    const extraL = (i === 0) ? 3 : 0;
+    const extraR = (i === TAIL_N - 1) ? 3 : 0;
+    ctx.fillRect(-extraL, -SCAF_H/2, SEG_W + extraL + extraR, SCAF_H);
+    ctx.strokeRect(-extraL, -SCAF_H/2, SEG_W + extraL + extraR, SCAF_H);
+
+    // ── Monomer (parallelogram) ──
+    const monoCX = SEG_W / 2;
+    const bL = monoCX - MONO_W / 2;
+    const bR = monoCX + MONO_W / 2;
+    const tL = bL + SKEW;
+    const tR = bR + SKEW;
+    const monoTop = -SCAF_H/2 - MONO_H;
+
+    ctx.beginPath();
+    ctx.moveTo(bL, -SCAF_H/2);
+    ctx.lineTo(tL, monoTop);
+    ctx.lineTo(tR, monoTop);
+    ctx.lineTo(bR, -SCAF_H/2);
+    ctx.closePath();
+    ctx.fillStyle = '#f87171';
+    ctx.fill();
+    ctx.strokeStyle = '#dc2626';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+
+    // Inner lighter fill
+    const ins = 2, inSkew = SKEW * (MONO_H - ins*2) / MONO_H;
+    ctx.beginPath();
+    ctx.moveTo(bL+ins, -SCAF_H/2 - ins);
+    ctx.lineTo(bL+ins+inSkew, monoTop+ins);
+    ctx.lineTo(bR-ins+inSkew, monoTop+ins);
+    ctx.lineTo(bR-ins, -SCAF_H/2 - ins);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(252,165,165,0.25)';
+    ctx.fill();
+
+    // ── Hinge on top ──
+    const hCX = (tL + tR) / 2;
+    const hGap = 2;
+    const hBot = monoTop - hGap;
+    const hTop = hBot - HB_H;
+
+    // Connection stub
+    ctx.strokeStyle = '#1d4ed8';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(hCX, monoTop);
+    ctx.lineTo(hCX, hBot);
+    ctx.stroke();
+
+    // Hinge base
+    ctx.fillStyle = '#2563eb';
+    ctx.strokeStyle = '#1d4ed8';
+    ctx.lineWidth = 0.6;
+    ctx.fillRect(hCX - HB_W/2, hTop, HB_W, HB_H);
+    ctx.strokeRect(hCX - HB_W/2, hTop, HB_W, HB_H);
+
+    // Hinge arm (rotates with bendProgress like the animation)
+    ctx.save();
+    ctx.translate(hCX, hTop);
+    const armAng = bendProgress * OPEN_ANG * Math.PI / 180;
+    ctx.rotate(armAng);
+
+    ctx.fillStyle = '#3b82f6';
+    ctx.fillRect(-ARM_W/2, -ARM_H, ARM_W, ARM_H);
+    ctx.strokeStyle = '#1d4ed8';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(-ARM_W/2, -ARM_H, ARM_W, ARM_H);
+
+    // Azobenzene chevron
+    ctx.beginPath();
+    ctx.moveTo(-ARM_W/2 - 1, -2);
+    ctx.lineTo(-ARM_W/2 - 4, -ARM_H/2);
+    ctx.lineTo(-ARM_W/2 - 1, -ARM_H + 2);
+    ctx.strokeStyle = '#dc2626';
+    ctx.lineWidth = 1.5;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+    ctx.restore();
+
+    // ── Clash indicator ──
+    if (bendProgress > 0.4 && i > 0) {
+      const clashAlpha = Math.min(0.8, (bendProgress - 0.4) * 2);
+      const clX = 2;
+      const clY = monoTop - hGap - HB_H;
+      ctx.save();
+      ctx.translate(clX, clY);
+      // Mini star
+      const spikes = 6, oR = 4, iR = 2;
+      ctx.fillStyle = `rgba(239,68,68,${clashAlpha})`;
+      ctx.beginPath();
+      for (let s = 0; s < spikes * 2; s++) {
+        const a = (s * Math.PI / spikes) - Math.PI / 2;
+        const r = s % 2 === 0 ? oR : iR;
+        if (s === 0) ctx.moveTo(r * Math.cos(a), r * Math.sin(a));
+        else ctx.lineTo(r * Math.cos(a), r * Math.sin(a));
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // ── Joint divider ──
+    if (i < TAIL_N - 1) {
+      ctx.fillStyle = '#111';
+      ctx.fillRect(SEG_W - 1.5, -SCAF_H/2 - 1, 3, SCAF_H + 2);
+    }
+
+    // Move to next segment
+    ctx.translate(SEG_W, 0);
+  }
+
+  ctx.restore();
+}
+
+function drawStartMarker() {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(148,163,184,0.25)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([3, 3]);
+  ctx.beginPath();
+  ctx.arc(startPos.x, startPos.y, 6, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  const dx = swimmer.x - startPos.x, dy = swimmer.y - startPos.y;
+  if (Math.sqrt(dx*dx+dy*dy) > 20) {
+    ctx.strokeStyle = 'rgba(234,179,8,0.2)';
+    ctx.setLineDash([4,4]);
+    ctx.beginPath();
+    ctx.moveTo(startPos.x, startPos.y);
+    ctx.lineTo(swimmer.x, swimmer.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  ctx.restore();
+}
+
+function drawScaleAndFrame() {
+  ctx.fillStyle = 'rgba(148,163,184,0.5)';
+  ctx.fillRect(W - 110, H - 22, 50, 2.5);
+  ctx.font = '10px system-ui';
+  ctx.textAlign = 'center';
+  ctx.fillText('100 nm', W - 85, H - 27);
+
+  ctx.strokeStyle = 'rgba(148,163,184,0.2)';
+  ctx.lineWidth = 2;
+  const m = 6, c = 20;
+  ctx.beginPath(); ctx.moveTo(m,m+c); ctx.lineTo(m,m); ctx.lineTo(m+c,m); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(W-m-c,m); ctx.lineTo(W-m,m); ctx.lineTo(W-m,m+c); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(m,H-m-c); ctx.lineTo(m,H-m); ctx.lineTo(m+c,H-m); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(W-m-c,H-m); ctx.lineTo(W-m,H-m); ctx.lineTo(W-m,H-m-c); ctx.stroke();
+}
+
+// ── Loop ──
+let lastTime = 0;
+function frame(ts) {
+  const dt = Math.min((ts - lastTime) / 1000, 0.05);
+  lastTime = ts;
+  time += dt;
+
+  updateLight(dt);
+  updateSwimmer(dt);
+
+  ctx.clearRect(0, 0, W, H);
+  drawBackground();
+  drawTrail();
+  drawStartMarker();
+  drawIRPTail();
+  drawSwimmerBody();
+  drawScaleAndFrame();
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
