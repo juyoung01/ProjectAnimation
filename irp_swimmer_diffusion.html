@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cilia Swimmer Diffusion — Localized UV/Blue Activation</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:#0a0e1a;display:flex;flex-direction:column;align-items:center;padding:16px;min-height:100vh;color:#e2e8f0}
+  h1{font-size:17px;font-weight:600;color:#e2e8f0;margin-bottom:2px}
+  .sub{font-size:12px;color:#94a3b8;margin-bottom:10px;text-align:center;max-width:750px;line-height:1.5}
+  .stage{background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:4px;box-shadow:0 0 30px rgba(59,130,246,.08)}
+  .cr{display:flex;gap:10px;margin-top:12px;align-items:center;flex-wrap:wrap}
+  .cr button{padding:7px 16px;font-size:13px;font-weight:500;border:1.5px solid #334155;border-radius:8px;cursor:pointer;background:#1e293b;color:#e2e8f0;transition:all .15s}
+  .cr button:hover{background:#334155}
+  .cr button.active{border-color:#a855f7;background:#2e1065;color:#c084fc}
+  .pill{font-size:11px;padding:3px 10px;border-radius:6px;background:#1e293b;color:#94a3b8;font-weight:500}
+  .pill.on{background:#2e1065;color:#c084fc}
+  .legend{display:flex;gap:14px;margin-top:8px;flex-wrap:wrap}
+  .legend span{display:flex;align-items:center;gap:4px;font-size:11px;color:#94a3b8}
+</style>
+</head>
+<body>
+
+<h1>Directional Diffusion — Left-Side UV/Blue Activation</h1>
+<p class="sub">왼쪽 절반에만 UV/Blue cycling → 왼쪽 swimmer 확산 증가 → 오른쪽으로 net migration</p>
+
+<div class="stage"><canvas id="cv" width="950" height="550"></canvas></div>
+
+<div class="cr">
+  <button id="btn-start" onclick="toggleLight()">☀️ Start Left UV/Blue</button>
+  <button onclick="resetAll()">↺ Reset</button>
+  <span id="pill" class="pill">No light — uniform Brownian</span>
+</div>
+
+<div class="legend">
+  <span><svg width="14" height="14"><circle cx="7" cy="7" r="5" fill="#f59e0b" stroke="#92400e" stroke-width="1"/></svg> AuNP + IRP cilia</span>
+  <span><svg width="14" height="14"><rect width="7" height="14" fill="rgba(168,85,247,0.15)"/><rect x="7" width="7" height="14" fill="rgba(30,58,138,0.08)"/></svg> UV zone (left half)</span>
+  <span><svg width="14" height="14"><line x1="7" y1="0" x2="7" y2="14" stroke="#334155" stroke-width="1" stroke-dasharray="2,2"/></svg> Boundary</span>
+</div>
+
+<script>
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const W = cv.width, H = cv.height;
+
+const HALF = W / 2; // left half = UV zone
+
+// ── Swimmers ──
+const NUM = 40;
+const R = 8;           // body radius (small)
+const TAIL_SEGS = 3;
+const TAIL_SEG_LEN = 5;
+const TAIL_MONO_W = 4, TAIL_MONO_H = 8, TAIL_SKEW = 2;
+const TAIL_SCAF_H = 1.5;
+
+const BROWNIAN = 0.18;
+const BROWNIAN_ACTIVE = 0.7;  // ~4x when cycling
+const TORQUE = 0.08;
+const THRUST = 0.012;
+const DAMPING = 0.955;
+const ANG_DAMP = 0.85;
+
+let lightOn = false;
+let time = 0;
+let lightPhase = 0; // for UV/Blue cycling
+const CYCLE_HZ = 10;
+
+let swimmers = [];
+
+function initSwimmers() {
+  swimmers = [];
+  for (let i = 0; i < NUM; i++) {
+    // Spread uniformly
+    swimmers.push({
+      x: 60 + Math.random() * (W - 120),
+      y: 50 + Math.random() * (H - 130),
+      angle: Math.random() * Math.PI * 2,
+      vx: 0, vy: 0, angVel: 0,
+      bendProgress: 0,
+      prevBend: 0,
+      startX: 0, // set below
+    });
+    swimmers[i].startX = swimmers[i].x;
+  }
+}
+initSwimmers();
+
+function resetAll() {
+  lightOn = false;
+  time = 0;
+  lightPhase = 0;
+  initSwimmers();
+  document.getElementById('btn-start').textContent = '☀️ Start Left UV/Blue';
+  document.getElementById('btn-start').classList.remove('active');
+  document.getElementById('pill').className = 'pill';
+  document.getElementById('pill').textContent = 'No light — uniform Brownian';
+}
+
+function toggleLight() {
+  lightOn = !lightOn;
+  const btn = document.getElementById('btn-start');
+  btn.textContent = lightOn ? '⏸ Stop Light' : '☀️ Start Left UV/Blue';
+  btn.classList.toggle('active', lightOn);
+  document.getElementById('pill').className = lightOn ? 'pill on' : 'pill';
+  document.getElementById('pill').textContent = lightOn ? 'Left UV/Blue cycling @ 10Hz' : 'No light — uniform Brownian';
+}
+
+// ── Update ──
+function update(dt) {
+  if (lightOn) {
+    lightPhase += dt * CYCLE_HZ * Math.PI * 2;
+  }
+  const uvPhase = lightOn ? (Math.sin(lightPhase) > 0) : false; // true=UV, false=Blue
+
+  for (const s of swimmers) {
+    const inZone = s.x < HALF; // left half
+
+    // Brownian
+    const bf = (lightOn && inZone) ? BROWNIAN_ACTIVE : BROWNIAN;
+    s.vx += (Math.random() - 0.5) * bf;
+    s.vy += (Math.random() - 0.5) * bf;
+    s.angVel += (Math.random() - 0.5) * TORQUE;
+
+    // Cilia bending (only in UV zone)
+    if (lightOn && inZone) {
+      if (uvPhase) {
+        s.bendProgress = Math.min(1, s.bendProgress + dt * 20);
+      } else {
+        s.bendProgress = Math.max(0, s.bendProgress - dt * 20);
+      }
+
+      // Thrust from bend change
+      const bendChange = s.bendProgress - s.prevBend;
+      if (Math.abs(bendChange) > 0.001) {
+        const thrustMag = bendChange > 0
+          ? THRUST * bendChange * 40
+          : THRUST * bendChange * 10;
+        s.vx += Math.cos(s.angle) * thrustMag;
+        s.vy += Math.sin(s.angle) * thrustMag;
+      }
+    } else {
+      // Outside zone: cilia relax
+      s.bendProgress = Math.max(0, s.bendProgress - dt * 5);
+    }
+    s.prevBend = s.bendProgress;
+
+    s.vx *= DAMPING;
+    s.vy *= DAMPING;
+    s.angVel *= ANG_DAMP;
+
+    s.x += s.vx;
+    s.y += s.vy;
+    s.angle += s.angVel;
+
+    // Boundary (soft walls)
+    const m = 25;
+    if (s.x < m) { s.x = m; s.vx = Math.abs(s.vx) * 0.3; }
+    if (s.x > W - m) { s.x = W - m; s.vx = -Math.abs(s.vx) * 0.3; }
+    if (s.y < m) { s.y = m; s.vy = Math.abs(s.vy) * 0.3; }
+    if (s.y > H - m - 30) { s.y = H - m - 30; s.vy = -Math.abs(s.vy) * 0.3; }
+  }
+}
+
+// ── Drawing ──
+function drawBackground() {
+  ctx.fillStyle = '#0a1628';
+  ctx.fillRect(0, 0, W, H);
+
+  // UV zone highlight (left half)
+  if (lightOn) {
+    const uvOn = Math.sin(lightPhase) > 0;
+    if (uvOn) {
+      ctx.fillStyle = 'rgba(168,85,247,0.06)';
+    } else {
+      ctx.fillStyle = 'rgba(59,130,246,0.04)';
+    }
+    ctx.fillRect(0, 0, HALF, H);
+
+    // Light rays on left
+    const color = uvOn ? '168,85,247' : '59,130,246';
+    for (let i = 0; i < 16; i++) {
+      const x = 8 + i * 30;
+      const alpha = 0.06 + 0.03 * Math.sin(time * 3 + i);
+      ctx.strokeStyle = `rgba(${color},${alpha})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + 2, 22); ctx.stroke();
+    }
+
+    // Label
+    ctx.fillStyle = uvOn ? 'rgba(168,85,247,0.5)' : 'rgba(59,130,246,0.5)';
+    ctx.font = 'bold 10px system-ui';
+    ctx.textAlign = 'left';
+    ctx.fillText(uvOn ? 'UV' : 'Blue', 8, 14);
+  }
+
+  // Center divider
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath();
+  ctx.moveTo(HALF, 0);
+  ctx.lineTo(HALF, H);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Zone labels
+  ctx.fillStyle = 'rgba(148,163,184,0.3)';
+  ctx.font = '10px system-ui';
+  ctx.textAlign = 'center';
+  ctx.fillText('UV/Blue Zone', HALF / 2, H - 12);
+  ctx.fillText('No Light', HALF + HALF / 2, H - 12);
+}
+
+function drawSwimmer(s) {
+  ctx.save();
+  ctx.translate(s.x, s.y);
+
+  // ── Tail (IRP cilia) ──
+  ctx.save();
+  ctx.rotate(s.angle + Math.PI);
+  ctx.translate(R + 1, 0);
+
+  const bendPerJoint = s.bendProgress * 15 * Math.PI / 180;
+  for (let i = 0; i < TAIL_SEGS; i++) {
+    if (i > 0) ctx.rotate(bendPerJoint);
+
+    // Scaffold
+    ctx.fillStyle = '#ef4444';
+    ctx.fillRect(0, -TAIL_SCAF_H/2, TAIL_SEG_LEN, TAIL_SCAF_H);
+
+    // Monomer
+    const cx = TAIL_SEG_LEN / 2;
+    const bL = cx - TAIL_MONO_W/2, bR = cx + TAIL_MONO_W/2;
+    const tL = bL + TAIL_SKEW, tR = bR + TAIL_SKEW;
+    const top = -TAIL_SCAF_H/2 - TAIL_MONO_H;
+    ctx.beginPath();
+    ctx.moveTo(bL, -TAIL_SCAF_H/2);
+    ctx.lineTo(tL, top);
+    ctx.lineTo(tR, top);
+    ctx.lineTo(bR, -TAIL_SCAF_H/2);
+    ctx.closePath();
+    ctx.fillStyle = '#f87171';
+    ctx.fill();
+
+    // Hinge
+    const hCX = (tL + tR) / 2;
+    ctx.fillStyle = '#2563eb';
+    ctx.fillRect(hCX - 2, top - 4, 4, 4);
+
+    // Arm
+    ctx.save();
+    ctx.translate(hCX, top - 4);
+    ctx.rotate(s.bendProgress * -50 * Math.PI / 180);
+    ctx.fillStyle = '#3b82f6';
+    ctx.fillRect(-2, -5, 4, 5);
+    ctx.restore();
+
+    if (i < TAIL_SEGS - 1) {
+      ctx.fillStyle = '#111';
+      ctx.fillRect(TAIL_SEG_LEN - 0.5, -TAIL_SCAF_H/2 - 0.5, 1, TAIL_SCAF_H + 1);
+    }
+    ctx.translate(TAIL_SEG_LEN, 0);
+  }
+  ctx.restore();
+
+  // ── Body (Gold Nanoparticle) ──
+  // Glow
+  const pulse = 0.5 + 0.2 * Math.sin(time * 2.5 + s.angle);
+  const glow = ctx.createRadialGradient(0, 0, R * 0.3, 0, 0, R * 2);
+  glow.addColorStop(0, `rgba(251,191,36,${0.25 * pulse})`);
+  glow.addColorStop(1, 'rgba(245,158,11,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(0, 0, R * 2, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(0, 0, R, 0, Math.PI * 2);
+  const grd = ctx.createRadialGradient(-2, -2, 1, 0, 0, R);
+  grd.addColorStop(0, '#fef3c7');
+  grd.addColorStop(0.3, '#fcd34d');
+  grd.addColorStop(0.6, '#f59e0b');
+  grd.addColorStop(1, '#78350f');
+  ctx.fillStyle = grd;
+  ctx.fill();
+  ctx.strokeStyle = '#92400e';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Highlight
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  ctx.beginPath();
+  ctx.arc(-2, -2, R * 0.25, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawHistogram() {
+  // Simple bar chart at bottom showing left vs right count
+  const leftCount = swimmers.filter(s => s.x < HALF).length;
+  const rightCount = NUM - leftCount;
+
+  const barY = H - 45;
+  const barH = 18;
+  const barMaxW = 100;
+
+  // Left bar
+  const lW = (leftCount / NUM) * barMaxW;
+  ctx.fillStyle = 'rgba(168,85,247,0.4)';
+  ctx.fillRect(HALF / 2 - lW / 2, barY, lW, barH);
+  ctx.fillStyle = '#c084fc';
+  ctx.font = 'bold 11px system-ui';
+  ctx.textAlign = 'center';
+  ctx.fillText(`${leftCount}`, HALF / 2, barY + 13);
+
+  // Right bar
+  const rW = (rightCount / NUM) * barMaxW;
+  ctx.fillStyle = 'rgba(59,130,246,0.3)';
+  ctx.fillRect(HALF + HALF / 2 - rW / 2, barY, rW, barH);
+  ctx.fillStyle = '#60a5fa';
+  ctx.fillText(`${rightCount}`, HALF + HALF / 2, barY + 13);
+
+  // Labels
+  ctx.fillStyle = 'rgba(148,163,184,0.5)';
+  ctx.font = '9px system-ui';
+  ctx.fillText('Left', HALF / 2, barY - 4);
+  ctx.fillText('Right', HALF + HALF / 2, barY - 4);
+}
+
+function drawMicroscopeFrame() {
+  ctx.strokeStyle = 'rgba(148,163,184,0.2)';
+  ctx.lineWidth = 2;
+  const m = 6, c = 18;
+  ctx.beginPath(); ctx.moveTo(m,m+c); ctx.lineTo(m,m); ctx.lineTo(m+c,m); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(W-m-c,m); ctx.lineTo(W-m,m); ctx.lineTo(W-m,m+c); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(m,H-m-c); ctx.lineTo(m,H-m); ctx.lineTo(m+c,H-m); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(W-m-c,H-m); ctx.lineTo(W-m,H-m); ctx.lineTo(W-m,H-m-c); ctx.stroke();
+}
+
+// ── Loop ──
+let lastTime = 0;
+function frame(ts) {
+  const dt = Math.min((ts - lastTime) / 1000, 0.05);
+  lastTime = ts;
+  time += dt;
+
+  update(dt);
+
+  ctx.clearRect(0, 0, W, H);
+  drawBackground();
+  for (const s of swimmers) drawSwimmer(s);
+  drawHistogram();
+  drawMicroscopeFrame();
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
