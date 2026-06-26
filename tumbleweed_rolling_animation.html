@@ -1,0 +1,292 @@
+<style>
+  .cr{display:flex;align-items:center;gap:10px;margin:10px 0 0;flex-wrap:wrap}
+  .cr button{min-width:140px;padding:7px 14px;font-size:13px}
+  .cr button.on-uv{background:#F3E8FF;color:#7C3AED;border-color:#C4B5FD}
+  .cr button.on-bl{background:#E6F1FB;color:#185FA5;border-color:#85B7EB}
+  .pl{display:inline-block;font-size:12px;padding:3px 10px;border-radius:var(--border-radius-md);font-weight:500;background:var(--color-background-secondary);color:var(--color-text-secondary)}
+  .ts{font-size:12px;fill:var(--color-text-secondary)}
+  .arm{transition:transform .45s ease}
+</style>
+
+<svg width="100%" viewBox="0 0 760 520">
+  <defs>
+    <linearGradient id="fil" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#d9efce"/>
+      <stop offset="55%" stop-color="#b6dca0"/>
+      <stop offset="100%" stop-color="#9ccb82"/>
+    </linearGradient>
+    <radialGradient id="pab-grad">
+      <stop offset="0%" stop-color="#FFF06A"/>
+      <stop offset="100%" stop-color="#F2D300"/>
+    </radialGradient>
+  </defs>
+
+  <text x="380" y="26" text-anchor="middle" font-size="14" font-weight="700" fill="var(--color-text-primary)">WALKER-C8 rolling on the filament</text>
+  <text class="ts" id="info" x="380" y="46" text-anchor="middle">Two squares joined at the hinge, azobenzene clamping the joint; a PAB sits at the bottom joint. Press Blue.</text>
+
+  <g id="uv-rays" opacity="0"></g>
+  <g id="bl-rays" opacity="0"></g>
+
+  <g id="track"></g>
+  <g id="walker"></g>
+  <g id="activePab"></g>
+  <g id="clash" opacity="0"></g>
+
+  <!-- Legend -->
+  <g transform="translate(20,494)">
+    <circle cx="7" cy="8" r="7" fill="none" stroke="#6aaa5e" stroke-width="3"/>
+    <text class="ts" x="20" y="12">Walker core (C8 ring)</text>
+
+    <rect x="156" y="1" width="13" height="13" rx="1.5" fill="#1f5c99"/>
+    <rect x="168" y="2" width="13" height="13" rx="1.5" fill="#1f5c99" transform="rotate(24 168 8)"/>
+    <path d="M165 3 L160 8 L166 12" fill="none" stroke="#DC2626" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    <text class="ts" x="190" y="12">Hinge: two joined squares + azobenzene clamp</text>
+
+    <circle cx="478" cy="8" r="6" fill="url(#pab-grad)" stroke="#B8860B" stroke-width="0.8"/>
+    <text class="ts" x="490" y="12">PAB</text>
+
+    <rect x="536" y="3" width="18" height="10" rx="3" fill="url(#fil)" stroke="#7bbd6f" stroke-width="0.6"/>
+    <text class="ts" x="560" y="12">Filament</text>
+
+    <line x1="630" y1="8" x2="643" y2="8" stroke="#A855F7" stroke-width="2"/>
+    <text class="ts" x="649" y="12">UV</text>
+    <line x1="684" y1="8" x2="697" y2="8" stroke="#378ADD" stroke-width="2"/>
+    <text class="ts" x="703" y="12">Blue</text>
+  </g>
+</svg>
+
+<div class="cr">
+  <button id="b-bl" onclick="goBlue()">Blue: close → stroke → roll</button>
+  <button id="b-uv" onclick="goUV()">UV: open hinges (reset)</button>
+  <button onclick="goReset()">Reset</button>
+  <span id="pl" class="pl">Ready</span>
+</div>
+
+<script>
+const NS='http://www.w3.org/2000/svg';
+function mk(t,a){const e=document.createElementNS(NS,t);for(const[k,v]of Object.entries(a))e.setAttribute(k,v);return e}
+
+// ---- Geometry ----
+const SIDES=8;
+const SQ=26;                       // square size
+const R_MOUNT=44;                  // base square inner radius (ring rim)
+const R_JOINT=R_MOUNT+SQ;          // 70 — pivot where the two squares are joined (PAB sits here)
+const R_ARM_OUT=R_JOINT+SQ;        // 96
+const ROLL_DIR=-1;                 // reversed roll
+
+const CENTER_Y=300;
+const PAB_CY=CENTER_Y+R_JOINT;     // 370 — joint / contact line
+const S=R_JOINT*Math.PI/4;         // roll per 45deg (rolling without slipping on the joint line)
+const FIL_TOP=402, FIL_BOT=442;
+const START_CX=560;
+const NM_PER_STEP=4.7;
+
+const PIVOT_X=SQ;                  // local x of the joint (outer edge of base = inner edge of arm)
+// two squares joined at the JUNCTION (edge-centre pivot), like the original gliding hinge:
+// closed = collinear straight bar; open = arm gently tilts (no scrunch)
+const OPEN_BEND=-26;   // UV / rest — arm tilted by the opening angle, opening AWAY from the azobenzene
+const CLOSE_BEND=0;    // Blue — arm straightens in line with base (the power stroke)
+
+const PAB=[];
+for(let n=-9;n<=6;n++) PAB.push(+(START_CX+n*S).toFixed(2));
+
+let cx=START_CX, rot=0;
+let phase='rest', busy=false, steps=0;
+
+// ---- Filament + PABs ----
+function buildTrack(){
+  const g=document.getElementById('track');g.innerHTML='';
+  g.appendChild(mk('rect',{x:14,y:FIL_TOP,width:732,height:FIL_BOT-FIL_TOP,rx:20,fill:'url(#fil)',stroke:'#7bbd6f','stroke-width':'1'}));
+  g.appendChild(mk('ellipse',{cx:14,cy:(FIL_TOP+FIL_BOT)/2,rx:10,ry:(FIL_BOT-FIL_TOP)/2,fill:'#9ccb82',stroke:'#7bbd6f','stroke-width':'1'}));
+  g.appendChild(mk('text',{x:380,y:(FIL_TOP+FIL_BOT)/2+5,'text-anchor':'middle','font-size':'16','font-weight':'600',fill:'#2a5c24'})).textContent='Filament';
+  PAB.forEach(x=>{
+    g.appendChild(mk('line',{x1:x,y1:FIL_TOP,x2:x,y2:PAB_CY+5,stroke:'#5b7d99','stroke-width':'2'}));
+    g.appendChild(mk('circle',{cx:x,cy:PAB_CY,r:'8',fill:'url(#pab-grad)',stroke:'#B8860B','stroke-width':'1.2'}));
+  });
+}
+
+// ---- Green ring core ----
+function buildCore(g){
+  const greens=['#a9d4a0','#7bbd6f','#cbe7c2','#8fc785'];
+  g.appendChild(mk('circle',{cx:0,cy:0,r:'14',fill:'#ffffff',stroke:'#cfe3c8','stroke-width':'1'}));
+  [[23,10,14],[34,14,18]].forEach(([rad,n,len],ri)=>{
+    for(let i=0;i<n;i++){
+      const th=(i/n)*2*Math.PI + ri*0.26;
+      const x=rad*Math.cos(th), y=rad*Math.sin(th);
+      const deg=th*180/Math.PI + 62;
+      g.appendChild(mk('rect',{x:-3,y:-len/2,width:6,height:len,rx:3,
+        fill:greens[(i+ri)%greens.length],stroke:'#5a9e52','stroke-width':'0.5',
+        transform:`translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${deg.toFixed(1)})`}));
+    }
+  });
+}
+
+function rotP(p,deg){const r=deg*Math.PI/180,c=Math.cos(r),s=Math.sin(r);return [p[0]*c-p[1]*s,p[0]*s+p[1]*c];}
+
+// azobenzene chevron at the JUNCTION (edge-centre), two endpoints on the two squares, tip sticking
+// out to the side; the arm endpoint rotates with the arm about the junction, so it never flips.
+function azoPath(bend){
+  const r=bend*Math.PI/180;
+  const Bp=[SQ-3, -SQ/2+1];                   // endpoint on base square (fixed)
+  const tip=[SQ, -SQ/2-8];                    // chevron tip, out to the side
+  const rx=3, ry=-SQ/2+1;                     // arm endpoint relative to junction (SQ,0)
+  const Ap=[SQ+rx*Math.cos(r)-ry*Math.sin(r), rx*Math.sin(r)+ry*Math.cos(r)];
+  return `M${Bp[0].toFixed(1)} ${Bp[1].toFixed(1)} L${tip[0].toFixed(1)} ${tip[1].toFixed(1)} L${Ap[0].toFixed(1)} ${Ap[1].toFixed(1)}`;
+}
+
+// ---- Walker: ring + 8 hinges (two joined squares + azobenzene) ----
+function buildWalker(){
+  const g=document.getElementById('walker');g.innerHTML='';
+  for(let k=0;k<SIDES;k++){
+    const th=(k*45)*Math.PI/180;
+    const vx=R_MOUNT*Math.cos(th), vy=R_MOUNT*Math.sin(th);
+    const angDeg=th*180/Math.PI;
+    const hg=mk('g',{transform:`translate(${vx.toFixed(1)} ${vy.toFixed(1)}) rotate(${angDeg.toFixed(1)})`});
+
+    // PIECE 1 — base square (inner, joined to ring rim)
+    hg.appendChild(mk('rect',{x:0,y:-SQ/2,width:SQ,height:SQ,rx:2,fill:'#1f5c99',stroke:'#123a5e','stroke-width':'1'}));
+
+    // PIECE 2 — arm square (outer, joined to base at the pivot; rotates about it)
+    const arm=mk('g',{class:'arm'});
+    arm.style.transformOrigin=`${PIVOT_X}px 0px`;   // pivot at the junction (edge centre)
+    arm.appendChild(mk('rect',{x:SQ,y:-SQ/2,width:SQ,height:SQ,rx:2,fill:'#1f5c99',stroke:'#123a5e','stroke-width':'1'}));
+    hg.appendChild(arm);
+
+    // azobenzene clamp — endpoints on both squares
+    hg.appendChild(mk('path',{d:azoPath(OPEN_BEND),fill:'none',stroke:'#DC2626','stroke-width':'2.6',
+      'stroke-linecap':'round','stroke-linejoin':'round',class:'azo'}));
+
+    g.appendChild(hg);
+  }
+  buildCore(g);
+  setArms(true,true);
+  applyPose();
+}
+
+function setArms(open,instant){
+  const d=open?OPEN_BEND:CLOSE_BEND;
+  document.querySelectorAll('#walker .arm').forEach(a=>{
+    a.style.transition=instant?'none':'transform .45s ease';
+    a.style.transform=`rotate(${d}deg)`;
+  });
+  const p=azoPath(d);
+  document.querySelectorAll('#walker .azo').forEach(a=>a.setAttribute('d',p));
+}
+
+function applyPose(){
+  document.getElementById('walker').setAttribute('transform',
+    `translate(${cx.toFixed(2)} ${CENTER_Y}) rotate(${rot.toFixed(2)})`);
+}
+
+// show the engaged PAB on top, sitting at the bottom joint
+function updateActivePab(){
+  const g=document.getElementById('activePab');g.innerHTML='';
+  g.appendChild(mk('circle',{cx:contactPAB(),cy:PAB_CY,r:'8',fill:'url(#pab-grad)',stroke:'#B8860B','stroke-width':'1.4'}));
+}
+
+// ---- Light + clash ----
+function rays(id,col){const g=document.getElementById(id);g.innerHTML='';
+  for(let i=0;i<12;i++){const x=24+i*64;
+    g.appendChild(mk('line',{x1:x,y1:58,x2:x+4,y2:80,stroke:col,'stroke-width':'1',opacity:'0.45'}));}}
+function showRays(which){
+  document.getElementById('bl-rays').style.transition='opacity .3s';
+  document.getElementById('uv-rays').style.transition='opacity .3s';
+  document.getElementById('bl-rays').style.opacity=which==='bl'?'1':'0';
+  document.getElementById('uv-rays').style.opacity=which==='uv'?'1':'0';
+}
+function pill(t,c){const p=document.getElementById('pl');p.textContent=t;
+  p.style.background=c==='uv'?'#F3E8FF':c==='bl'?'#E6F1FB':'var(--color-background-secondary)';
+  p.style.color=c==='uv'?'#7C3AED':c==='bl'?'#185FA5':'var(--color-text-secondary)';}
+
+function showClash(wx,wy){
+  const cg=document.getElementById('clash');cg.innerHTML='';
+  const spikes=10,outerR=14,innerR=6;let pts='';
+  for(let s=0;s<spikes*2;s++){const a=(s*Math.PI/spikes)-Math.PI/2;const r=s%2===0?outerR:innerR;
+    pts+=`${(wx+r*Math.cos(a)).toFixed(1)},${(wy+r*Math.sin(a)).toFixed(1)} `;}
+  cg.appendChild(mk('polygon',{points:pts.trim(),fill:'#FF6A3D',opacity:'0.85'}));
+  cg.style.transition='none';cg.style.opacity='0';
+  requestAnimationFrame(()=>{cg.style.transition='opacity .15s';cg.style.opacity='1';});
+}
+function hideClash(){const cg=document.getElementById('clash');cg.style.transition='opacity .6s';cg.style.opacity='0';}
+
+function contactPAB(){let best=PAB[0];for(const x of PAB)if(Math.abs(x-cx)<Math.abs(best-cx))best=x;return best;}
+
+// ---- BLUE: hinge CLOSES (folds) and strokes the PAB -> rolls the FIRST half ----
+function goBlue(){
+  if(busy||phase!=='rest')return;busy=true;
+  document.getElementById('b-bl').classList.add('on-bl');
+  document.getElementById('b-uv').classList.remove('on-uv');
+  showRays('bl');
+  document.getElementById('info').textContent='Blue light: azobenzene folds the hinge shut — the arm strokes the PAB at the joint.';
+  pill('Closing — stroke...','bl');
+  setArms(false);
+  document.querySelectorAll('#walker .azo').forEach(a=>
+    a.animate([{stroke:'#DC2626'},{stroke:'#ff7a7a'},{stroke:'#DC2626'}],{duration:600}));
+
+  setTimeout(()=>{
+    showClash(contactPAB(), PAB_CY);
+    pill('Stroke! Rolling (½)...','bl');
+    document.getElementById('info').textContent='The stroke pushes the PAB → the walker rolls the first half-step.';
+    roll(0.5,()=>{
+      hideClash();busy=false;phase='mid';
+      pill('Half-rolled — press UV','bl');
+      document.getElementById('info').textContent='Half a PAB rolled. Press UV — the hinge opens and completes the roll.';
+    });
+  },450);
+}
+
+// ---- UV: hinge OPENS (arm spreads back) and rolls the SECOND half ----
+function goUV(){
+  if(busy||phase!=='mid')return;busy=true;
+  document.getElementById('b-uv').classList.add('on-uv');
+  document.getElementById('b-bl').classList.remove('on-bl');
+  showRays('uv');
+  document.getElementById('info').textContent='UV light: azobenzene opens the hinge — the angle widens and the walker finishes the roll.';
+  pill('Opening — rolling (½)...','uv');
+  setArms(true);
+  roll(0.5,()=>{
+    steps++;updateActivePab();busy=false;phase='rest';
+    const nm=(steps*NM_PER_STEP).toFixed(1);
+    pill(`Step ${steps} · ${nm} nm — press Blue`,'uv');
+    document.getElementById('info').textContent=
+      `Rolled one full PAB (4.7 nm). Total ${steps} steps = ${nm} nm. Press Blue to continue.`;
+    if(cx<70)document.getElementById('info').textContent=
+      `Reached the end after ${steps} steps (${nm} nm). Press Reset.`;
+  });
+}
+
+// circular roll by a fraction of one PAB (reversed direction)
+function roll(frac,done){
+  const cx0=cx, rot0=rot, dx=ROLL_DIR*S*frac, dr=ROLL_DIR*45*frac, dur=700;let start=null;
+  function frame(ts){
+    if(!start)start=ts;
+    let p=Math.min((ts-start)/dur,1);
+    const e=p<0.5?2*p*p:1-Math.pow(-2*p+2,2)/2;
+    cx=cx0+dx*e; rot=rot0+dr*e; applyPose();
+    if(p<1)requestAnimationFrame(frame);
+    else{cx=+(cx0+dx).toFixed(2);rot=rot0+dr;applyPose();done&&done();}
+  }
+  requestAnimationFrame(frame);
+}
+
+function goReset(){
+  busy=false;phase='rest';steps=0;cx=START_CX;rot=0;
+  document.getElementById('b-bl').classList.remove('on-bl');
+  document.getElementById('b-uv').classList.remove('on-uv');
+  document.getElementById('bl-rays').style.opacity='0';
+  document.getElementById('uv-rays').style.opacity='0';
+  document.getElementById('clash').style.opacity='0';
+  document.getElementById('info').textContent='Two squares joined at the hinge, azobenzene clamping the joint; a PAB sits at the bottom joint. Press Blue.';
+  pill('Ready','');
+  setArms(true,true);
+  applyPose();
+  updateActivePab();
+}
+
+rays('uv-rays','#A855F7');
+rays('bl-rays','#378ADD');
+buildTrack();
+buildWalker();
+updateActivePab();
+pill('Ready','');
+</script>
