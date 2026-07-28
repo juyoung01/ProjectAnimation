@@ -1,0 +1,356 @@
+<style>
+  .cr{display:flex;align-items:center;gap:10px;margin:10px 0 0;flex-wrap:wrap}
+  .cr button{min-width:150px;padding:7px 14px;font-size:13px}
+  .cr button.on-gn{background:#E7F6EC;color:#1c7d43;border-color:#8fd3a8}
+  .cr button.on-uv{background:#F3E8FF;color:#7C3AED;border-color:#C4B5FD}
+  .cr button.on-bl{background:#E6F1FB;color:#185FA5;border-color:#85B7EB}
+  .pl{display:inline-block;font-size:12px;padding:3px 10px;border-radius:var(--border-radius-md);font-weight:500;background:var(--color-background-secondary);color:var(--color-text-secondary)}
+  .ts{font-size:12px;fill:var(--color-text-secondary)}
+  .arm{transition:transform .45s ease}
+</style>
+
+<svg width="100%" viewBox="0 0 760 520">
+  <defs>
+    <linearGradient id="fil" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#d9efce"/>
+      <stop offset="55%" stop-color="#b6dca0"/>
+      <stop offset="100%" stop-color="#9ccb82"/>
+    </linearGradient>
+    <radialGradient id="pab-grad">
+      <stop offset="0%" stop-color="#FFF06A"/>
+      <stop offset="100%" stop-color="#F2D300"/>
+    </radialGradient>
+  </defs>
+
+  <text x="380" y="26" text-anchor="middle" font-size="14" font-weight="700" fill="var(--color-text-primary)">Two-colour hinge walker — one set always grips (no detachment)</text>
+  <text class="ts" id="info" x="380" y="46" text-anchor="middle">Green + blue hinge sets. Green closes green, UV closes blue, Blue opens both. Only one set closes at a time. Press Auto-walk.</text>
+
+  <g id="gn-rays" opacity="0"></g>
+  <g id="uv-rays" opacity="0"></g>
+  <g id="bl-rays" opacity="0"></g>
+
+  <g id="track"></g>
+  <g id="walker"></g>
+  <g id="activePab"></g>
+  <g id="clash" opacity="0"></g>
+
+  <!-- Legend -->
+  <g transform="translate(20,494)">
+    <rect x="0" y="1" width="13" height="13" rx="1.5" fill="#2f9e57"/>
+    <text class="ts" x="20" y="12">Green hinge set</text>
+
+    <rect x="132" y="1" width="13" height="13" rx="1.5" fill="#1f5c99"/>
+    <text class="ts" x="152" y="12">Blue hinge set</text>
+
+    <circle cx="268" cy="8" r="6" fill="url(#pab-grad)" stroke="#B8860B" stroke-width="0.8"/>
+    <text class="ts" x="280" y="12">PAB</text>
+
+    <rect x="326" y="3" width="18" height="10" rx="3" fill="url(#fil)" stroke="#7bbd6f" stroke-width="0.6"/>
+    <text class="ts" x="350" y="12">Filament</text>
+
+    <line x1="430" y1="8" x2="443" y2="8" stroke="#34C77B" stroke-width="2"/>
+    <text class="ts" x="449" y="12">Green</text>
+    <line x1="500" y1="8" x2="513" y2="8" stroke="#A855F7" stroke-width="2"/>
+    <text class="ts" x="519" y="12">UV</text>
+    <line x1="556" y1="8" x2="569" y2="8" stroke="#378ADD" stroke-width="2"/>
+    <text class="ts" x="575" y="12">Blue</text>
+  </g>
+</svg>
+
+<div class="cr">
+  <button id="b-gn" onclick="goGreen()">Green light: close green</button>
+  <button id="b-uv" onclick="goUV()">UV light: close blue</button>
+  <button id="b-bl" onclick="goBlue()">Blue light: open both</button>
+  <button id="b-auto" onclick="toggleAuto()">▶ Auto-walk</button>
+  <button onclick="goReset()">Reset</button>
+  <span id="pl" class="pl">Ready</span>
+  <span id="cnt" class="pl">Steps 0 · 0.0 nm</span>
+</div>
+
+<script>
+const NS='http://www.w3.org/2000/svg';
+function mk(t,a){const e=document.createElementNS(NS,t);for(const[k,v]of Object.entries(a))e.setAttribute(k,v);return e}
+
+// ---- Geometry ----
+const SIDES=8;
+const SQ=26;
+const R_MOUNT=44;
+const R_JOINT=R_MOUNT+SQ;          // 70 — pivot where the two squares are joined (PAB sits here)
+const ROLL_DIR=-1;                 // roll to the left
+
+const CENTER_Y=300;
+const PAB_CY=CENTER_Y+R_JOINT;     // 370 — joint / contact line
+const S=R_JOINT*Math.PI/4;         // roll distance per 45deg (one PAB, one hinge over)
+const FIL_TOP=402, FIL_BOT=442;
+const START_CX=560;
+const NM_PER_STEP=4.7;
+
+const PIVOT_X=SQ;
+const OPEN_BEND=-26;   // hinge open — arm tilted out, this set is "gripping" (a foot)
+const CLOSE_BEND=0;    // hinge closed — arm straightens in line: the power stroke
+
+const INTRO='Green + blue hinge sets. Green closes green, UV closes blue, Blue opens both. Only one set closes at a time — the other keeps its grip. Press Auto-walk.';
+
+const PAB=[];
+for(let n=-9;n<=6;n++) PAB.push(+(START_CX+n*S).toFixed(2));
+
+let cx=START_CX, rot=0;
+let state='open';          // 'open' | 'green' | 'blue'
+let busy=false, strokes=0;
+let auto=false, nextColor='green';
+
+// ---- Filament + PABs ----
+function buildTrack(){
+  const g=document.getElementById('track');g.innerHTML='';
+  g.appendChild(mk('rect',{x:14,y:FIL_TOP,width:732,height:FIL_BOT-FIL_TOP,rx:20,fill:'url(#fil)',stroke:'#7bbd6f','stroke-width':'1'}));
+  g.appendChild(mk('ellipse',{cx:14,cy:(FIL_TOP+FIL_BOT)/2,rx:10,ry:(FIL_BOT-FIL_TOP)/2,fill:'#9ccb82',stroke:'#7bbd6f','stroke-width':'1'}));
+  g.appendChild(mk('text',{x:380,y:(FIL_TOP+FIL_BOT)/2+5,'text-anchor':'middle','font-size':'16','font-weight':'600',fill:'#2a5c24'})).textContent='Filament';
+  PAB.forEach(x=>{
+    g.appendChild(mk('line',{x1:x,y1:FIL_TOP,x2:x,y2:PAB_CY+5,stroke:'#5b7d99','stroke-width':'2'}));
+    g.appendChild(mk('circle',{cx:x,cy:PAB_CY,r:'8',fill:'url(#pab-grad)',stroke:'#B8860B','stroke-width':'1.2'}));
+  });
+}
+
+// ---- Green ring core ----
+function buildCore(g){
+  const greens=['#a9d4a0','#7bbd6f','#cbe7c2','#8fc785'];
+  g.appendChild(mk('circle',{cx:0,cy:0,r:'14',fill:'#ffffff',stroke:'#cfe3c8','stroke-width':'1'}));
+  [[23,10,14],[34,14,18]].forEach(([rad,n,len],ri)=>{
+    for(let i=0;i<n;i++){
+      const th=(i/n)*2*Math.PI + ri*0.26;
+      const x=rad*Math.cos(th), y=rad*Math.sin(th);
+      const deg=th*180/Math.PI + 62;
+      g.appendChild(mk('rect',{x:-3,y:-len/2,width:6,height:len,rx:3,
+        fill:greens[(i+ri)%greens.length],stroke:'#5a9e52','stroke-width':'0.5',
+        transform:`translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${deg.toFixed(1)})`}));
+    }
+  });
+}
+
+// azobenzene chevron at the junction, endpoints on the two squares
+function azoPath(bend){
+  const r=bend*Math.PI/180;
+  const Bp=[SQ-3, -SQ/2+1];
+  const tip=[SQ, -SQ/2-8];
+  const rx=3, ry=-SQ/2+1;
+  const Ap=[SQ+rx*Math.cos(r)-ry*Math.sin(r), rx*Math.sin(r)+ry*Math.cos(r)];
+  return `M${Bp[0].toFixed(1)} ${Bp[1].toFixed(1)} L${tip[0].toFixed(1)} ${tip[1].toFixed(1)} L${Ap[0].toFixed(1)} ${Ap[1].toFixed(1)}`;
+}
+
+// ---- Walker: ring + 8 hinges, alternating green / blue ----
+function buildWalker(){
+  const g=document.getElementById('walker');g.innerHTML='';
+  for(let k=0;k<SIDES;k++){
+    const col=(k%2===0)?'green':'blue';
+    const fill=col==='green'?'#2f9e57':'#1f5c99';
+    const strk=col==='green'?'#1c6b39':'#123a5e';
+    const th=(k*45)*Math.PI/180;
+    const vx=R_MOUNT*Math.cos(th), vy=R_MOUNT*Math.sin(th);
+    const angDeg=th*180/Math.PI;
+    const hg=mk('g',{transform:`translate(${vx.toFixed(1)} ${vy.toFixed(1)}) rotate(${angDeg.toFixed(1)})`});
+
+    // PIECE 1 — base square (joined to ring rim)
+    hg.appendChild(mk('rect',{x:0,y:-SQ/2,width:SQ,height:SQ,rx:2,fill,stroke:strk,'stroke-width':'1'}));
+
+    // PIECE 2 — arm square (rotates about the junction)
+    const arm=mk('g',{class:'arm arm-'+col});
+    arm.style.transformOrigin=`${PIVOT_X}px 0px`;
+    arm.appendChild(mk('rect',{x:SQ,y:-SQ/2,width:SQ,height:SQ,rx:2,fill,stroke:strk,'stroke-width':'1'}));
+    hg.appendChild(arm);
+
+    // azobenzene clamp
+    hg.appendChild(mk('path',{d:azoPath(OPEN_BEND),fill:'none',stroke:'#C81E1E','stroke-width':'2.4',
+      'stroke-linecap':'round','stroke-linejoin':'round',class:'azo azo-'+col}));
+
+    g.appendChild(hg);
+  }
+  buildCore(g);
+  setHinges('open',true);
+  applyPose();
+}
+
+// which = 'open' | 'green' | 'blue'  (the set named is the one that CLOSES)
+function setHinges(which,instant){
+  const gb=(which==='green')?CLOSE_BEND:OPEN_BEND;
+  const bb=(which==='blue')?CLOSE_BEND:OPEN_BEND;
+  const apply=(sel,d)=>document.querySelectorAll(sel).forEach(a=>{
+    a.style.transition=instant?'none':'transform .45s ease';
+    a.style.transform=`rotate(${d}deg)`;});
+  apply('#walker .arm-green',gb);
+  apply('#walker .arm-blue',bb);
+  document.querySelectorAll('#walker .azo-green').forEach(a=>a.setAttribute('d',azoPath(gb)));
+  document.querySelectorAll('#walker .azo-blue').forEach(a=>a.setAttribute('d',azoPath(bb)));
+}
+
+function applyPose(){
+  document.getElementById('walker').setAttribute('transform',
+    `translate(${cx.toFixed(2)} ${CENTER_Y}) rotate(${rot.toFixed(2)})`);
+}
+
+function updateActivePab(){
+  const g=document.getElementById('activePab');g.innerHTML='';
+  g.appendChild(mk('circle',{cx:contactPAB(),cy:PAB_CY,r:'8',fill:'url(#pab-grad)',stroke:'#B8860B','stroke-width':'1.4'}));
+}
+
+// ---- Light + contact ----
+function rays(id,col){const g=document.getElementById(id);g.innerHTML='';
+  for(let i=0;i<12;i++){const x=24+i*64;
+    g.appendChild(mk('line',{x1:x,y1:58,x2:x+4,y2:80,stroke:col,'stroke-width':'1',opacity:'0.45'}));}}
+function showRays(which){
+  ['gn','uv','bl'].forEach(w=>{const g=document.getElementById(w+'-rays');
+    g.style.transition='opacity .3s';g.style.opacity=(w===which)?'1':'0';});}
+function pill(t,c){const p=document.getElementById('pl');p.textContent=t;
+  const bg={gn:'#E7F6EC',uv:'#F3E8FF',bl:'#E6F1FB'}[c]||'var(--color-background-secondary)';
+  const fg={gn:'#1c7d43',uv:'#7C3AED',bl:'#185FA5'}[c]||'var(--color-text-secondary)';
+  p.style.background=bg;p.style.color=fg;}
+function updateCounter(){
+  document.getElementById('cnt').textContent=`Steps ${strokes} · ${(strokes*NM_PER_STEP).toFixed(1)} nm`;}
+
+function showClash(wx,wy,col){
+  const cg=document.getElementById('clash');cg.innerHTML='';
+  const spikes=10,outerR=13,innerR=5;let pts='';
+  for(let s=0;s<spikes*2;s++){const a=(s*Math.PI/spikes)-Math.PI/2;const r=s%2===0?outerR:innerR;
+    pts+=`${(wx+r*Math.cos(a)).toFixed(1)},${(wy+r*Math.sin(a)).toFixed(1)} `;}
+  cg.appendChild(mk('polygon',{points:pts.trim(),fill:col||'#FF6A3D',opacity:'0.85'}));
+  cg.style.transition='none';cg.style.opacity='0';
+  requestAnimationFrame(()=>{cg.style.transition='opacity .15s';cg.style.opacity='1';});
+}
+function hideClash(){const cg=document.getElementById('clash');cg.style.transition='opacity .6s';cg.style.opacity='0';}
+
+function contactPAB(){let best=PAB[0];for(const x of PAB)if(Math.abs(x-cx)<Math.abs(best-cx))best=x;return best;}
+
+// ---- GREEN light: green hinges close and stroke -> roll one hinge over ----
+function goGreen(){
+  if(busy)return;
+  if(state!=='open'){warnBoth();return;}
+  busy=true;
+  document.getElementById('b-gn').classList.add('on-gn');
+  document.getElementById('b-uv').classList.remove('on-uv');
+  document.getElementById('b-bl').classList.remove('on-bl');
+  showRays('gn');
+  document.getElementById('info').textContent='Green light: the green hinges fold and stroke the PAB. The blue hinges stay open and keep their grip.';
+  pill('Green stroke...','gn');
+  setHinges('green');
+  document.querySelectorAll('#walker .azo-green').forEach(a=>
+    a.animate([{stroke:'#C81E1E'},{stroke:'#4ade80'},{stroke:'#C81E1E'}],{duration:600}));
+  setTimeout(()=>{
+    showClash(contactPAB(),PAB_CY,'#2f9e57');
+    roll(1.0,()=>{
+      hideClash();busy=false;state='green';strokes++;updateActivePab();updateCounter();
+      if(!auto){pill('Green closed — press Blue','gn');
+        document.getElementById('info').textContent='Stepped forward on the green stroke. A blue hinge is now at the bottom. Press Blue to open both, then UV.';}
+    });
+  },340);
+}
+
+// ---- UV light: blue hinges close and stroke -> roll one hinge over ----
+function goUV(){
+  if(busy)return;
+  if(state!=='open'){warnBoth();return;}
+  busy=true;
+  document.getElementById('b-uv').classList.add('on-uv');
+  document.getElementById('b-gn').classList.remove('on-gn');
+  document.getElementById('b-bl').classList.remove('on-bl');
+  showRays('uv');
+  document.getElementById('info').textContent='UV light: the blue hinges fold and stroke the PAB. The green hinges stay open and keep their grip.';
+  pill('Blue stroke...','uv');
+  setHinges('blue');
+  document.querySelectorAll('#walker .azo-blue').forEach(a=>
+    a.animate([{stroke:'#C81E1E'},{stroke:'#7ab8ff'},{stroke:'#C81E1E'}],{duration:600}));
+  setTimeout(()=>{
+    showClash(contactPAB(),PAB_CY,'#1f5c99');
+    roll(1.0,()=>{
+      hideClash();busy=false;state='blue';strokes++;updateActivePab();updateCounter();
+      if(!auto){pill('Blue closed — press Blue','uv');
+        document.getElementById('info').textContent='Stepped forward on the blue stroke. A green hinge is now at the bottom. Press Blue to open both, then Green.';}
+    });
+  },340);
+}
+
+// ---- BLUE light: BOTH sets open (relax) — grips reset, no over-clamping ----
+function goBlue(){
+  if(busy)return;
+  if(state==='open'){
+    document.getElementById('info').textContent='Both sets are already open. Press Green or UV to take a stroke.';return;}
+  busy=true;
+  document.getElementById('b-bl').classList.add('on-bl');
+  document.getElementById('b-gn').classList.remove('on-gn');
+  document.getElementById('b-uv').classList.remove('on-uv');
+  showRays('bl');
+  document.getElementById('info').textContent='Blue light: both hinge sets relax open — grips reset, ready for the next single-set stroke.';
+  pill('Both open','bl');
+  setHinges('open');
+  setTimeout(()=>{busy=false;state='open';
+    if(!auto)pill('Both open — Green or UV','bl');},520);
+}
+
+// guard: you may never close both sets at once (that is the detachment failure)
+function warnBoth(){
+  document.getElementById('info').textContent='One set is still closed. Open both first (Blue). Closing green and blue together would clamp every hinge at once — the grip loss that lets the walker fall off.';
+  pill('Open both first (Blue)','bl');
+  const b=document.getElementById('b-bl');
+  b.animate([{transform:'scale(1)'},{transform:'scale(1.06)'},{transform:'scale(1)'}],{duration:420});
+}
+
+// ---- Auto-walk: green -> open -> blue -> open -> ... (alternating, never both closed) ----
+function toggleAuto(){
+  auto=!auto;
+  const b=document.getElementById('b-auto');
+  b.textContent=auto?'⏸ Stop':'▶ Auto-walk';
+  b.classList.toggle('on-gn',auto);
+  if(auto)tick();
+}
+function tick(){
+  if(!auto)return;
+  if(busy){setTimeout(tick,100);return;}
+  if(cx<80){
+    auto=false;
+    document.getElementById('b-auto').textContent='▶ Auto-walk';
+    document.getElementById('b-auto').classList.remove('on-gn');
+    pill('Reached the end — Reset','gn');
+    document.getElementById('info').textContent='Walked to the end of the filament without ever losing grip — one set was always holding on. Press Reset.';
+    return;}
+  if(state==='open'){
+    const c=nextColor;nextColor=(c==='green')?'blue':'green';
+    (c==='green'?goGreen:goUV)();
+  }else{
+    goBlue();
+  }
+  setTimeout(tick,320);
+}
+
+// circular roll by a fraction of one PAB (one hinge over per full step)
+function roll(frac,done){
+  const cx0=cx, rot0=rot, dx=ROLL_DIR*S*frac, dr=ROLL_DIR*45*frac, dur=700;let start=null;
+  function frame(ts){
+    if(!start)start=ts;
+    let p=Math.min((ts-start)/dur,1);
+    const e=p<0.5?2*p*p:1-Math.pow(-2*p+2,2)/2;
+    cx=cx0+dx*e; rot=rot0+dr*e; applyPose();
+    if(p<1)requestAnimationFrame(frame);
+    else{cx=+(cx0+dx).toFixed(2);rot=rot0+dr;applyPose();done&&done();}
+  }
+  requestAnimationFrame(frame);
+}
+
+function goReset(){
+  auto=false;busy=false;state='open';strokes=0;cx=START_CX;rot=0;nextColor='green';
+  document.getElementById('b-auto').textContent='▶ Auto-walk';
+  ['b-gn','b-uv','b-bl','b-auto'].forEach(id=>
+    document.getElementById(id).classList.remove('on-gn','on-uv','on-bl'));
+  ['gn-rays','uv-rays','bl-rays'].forEach(id=>document.getElementById(id).style.opacity='0');
+  document.getElementById('clash').style.opacity='0';
+  document.getElementById('info').textContent=INTRO;
+  pill('Ready','');updateCounter();
+  setHinges('open',true);applyPose();updateActivePab();
+}
+
+rays('gn-rays','#34C77B');
+rays('uv-rays','#A855F7');
+rays('bl-rays','#378ADD');
+buildTrack();
+buildWalker();
+updateActivePab();
+updateCounter();
+pill('Ready','');
+</script>

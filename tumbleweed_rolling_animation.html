@@ -58,6 +58,7 @@
 <div class="cr">
   <button id="b-bl" onclick="goBlue()">Blue: close → stroke → roll</button>
   <button id="b-uv" onclick="goUV()">UV: open hinges (reset)</button>
+  <button id="b-hop" onclick="goHop()">Blue hop: close → detach</button>
   <button onclick="goReset()">Reset</button>
   <span id="pl" class="pl">Ready</span>
 </div>
@@ -255,6 +256,65 @@ function goUV(){
   });
 }
 
+// ---- BLUE HOP: every hinge snaps shut at once, the walker loses grip and hops off ----
+function goHop(){
+  if(busy||phase==='gone')return;busy=true;
+  document.getElementById('b-hop').classList.add('on-bl');
+  document.getElementById('b-bl').classList.remove('on-bl');
+  document.getElementById('b-uv').classList.remove('on-uv');
+  showRays('bl');
+  document.getElementById('info').textContent='Blue hop: azobenzene snaps every hinge shut at once — the walker can no longer grip the filament.';
+  pill('Hinges closing...','bl');
+  setArms(false);
+  document.querySelectorAll('#walker .azo').forEach(a=>
+    a.animate([{stroke:'#DC2626'},{stroke:'#ff7a7a'},{stroke:'#DC2626'}],{duration:500}));
+  setTimeout(()=>{
+    releasePuff(contactPAB(),PAB_CY);
+    pill('Hop — detaching!','bl');
+    document.getElementById('info').textContent='With all hinges clamped it can’t roll — the walker hops up and tumbles off the track.';
+    detachFly(()=>{
+      busy=false;phase='gone';
+      pill('Detached — press Reset','bl');
+      document.getElementById('info').textContent='The whole walker has broken off the filament. Press Reset to place it back.';
+    });
+  },470);
+}
+
+// small release burst where the walker breaks off
+function releasePuff(x,y){
+  const cg=document.getElementById('clash');cg.innerHTML='';
+  const c=mk('circle',{cx:x,cy:y,r:'6',fill:'none',stroke:'#378ADD','stroke-width':'3'});
+  cg.appendChild(c);cg.style.opacity='1';cg.style.transition='none';
+  const t0=performance.now(),dur=550;
+  function f(now){const p=Math.min((now-t0)/dur,1);
+    c.setAttribute('r',(6+26*p).toFixed(1));
+    c.setAttribute('stroke-width',Math.max(0.4,3-2.4*p).toFixed(2));
+    cg.style.opacity=(1-p).toFixed(3);
+    if(p<1)requestAnimationFrame(f);}
+  requestAnimationFrame(f);
+}
+
+// hop up (ease-out), then spin away off-screen and fade (ease-in)
+function detachFly(done){
+  const cx0=cx, rot0=rot, dur=1500, t0=performance.now();
+  const g=document.getElementById('walker');
+  function frame(now){
+    let p=Math.min((now-t0)/dur,1), px, py, prot, op;
+    if(p<0.22){                         // the hop
+      const q=p/0.22, e=1-Math.pow(1-q,2);
+      px=cx0; py=CENTER_Y-52*e; prot=rot0-14*e; op=1;
+    }else{                              // launch: travel-direction + up, big spin, fade out
+      const q=(p-0.22)/0.78, e=q*q;
+      px=cx0-240*e; py=(CENTER_Y-52)-380*e; prot=(rot0-14)-560*e;
+      op=1-Math.max(0,(q-0.45)/0.55);
+    }
+    g.setAttribute('transform',`translate(${px.toFixed(2)} ${py.toFixed(2)}) rotate(${prot.toFixed(2)})`);
+    g.style.opacity=op.toFixed(3);
+    if(p<1)requestAnimationFrame(frame);else done&&done();
+  }
+  requestAnimationFrame(frame);
+}
+
 // circular roll by a fraction of one PAB (reversed direction)
 function roll(frac,done){
   const cx0=cx, rot0=rot, dx=ROLL_DIR*S*frac, dr=ROLL_DIR*45*frac, dur=700;let start=null;
@@ -271,8 +331,10 @@ function roll(frac,done){
 
 function goReset(){
   busy=false;phase='rest';steps=0;cx=START_CX;rot=0;
+  document.getElementById('walker').style.opacity='1';
   document.getElementById('b-bl').classList.remove('on-bl');
   document.getElementById('b-uv').classList.remove('on-uv');
+  document.getElementById('b-hop').classList.remove('on-bl');
   document.getElementById('bl-rays').style.opacity='0';
   document.getElementById('uv-rays').style.opacity='0';
   document.getElementById('clash').style.opacity='0';

@@ -24,6 +24,7 @@ All animations are published via GitHub Pages at
 | Single Cell Hinge — Direction Explorer | [hinge_single_cell.html](https://juyoung01.github.io/ProjectAnimation/hinge_single_cell.html) |
 | THR Train Track — Hinge Rail Contraction/Expansion | [thr_hinge_traintrack.html](https://juyoung01.github.io/ProjectAnimation/thr_hinge_traintrack.html) |
 | Train Track Hinge — 1D Contraction/Expansion | [traintrack_hinge_schematic.html](https://juyoung01.github.io/ProjectAnimation/traintrack_hinge_schematic.html) |
+| Two-Color Hinge Walker — Green/Blue Hinge Sets on a Filament | [two_color_hinge_walker_animation.html](https://juyoung01.github.io/ProjectAnimation/two_color_hinge_walker_animation.html) |
 
 ## Filament & Motility
 
