@@ -28,23 +28,27 @@ canvas{margin-top:6px;max-width:100%;height:auto}
 .preset-btn:hover{border-color:#2E86AB;color:#5DADE2}
 .preset-btn.active{background:#1A3A50;color:#5DADE2;border-color:#2E86AB}
 input[type=range]{width:120px;accent-color:#E74C3C;background:#1A2030}
+.preset-label{color:#5D6D7E;font-size:10px}
+.angle-val{color:#E74C3C;font-family:monospace;font-size:11px;min-width:28px}
 .legend{display:flex;gap:14px;margin-top:4px;font-size:9px;color:#555}
 .ldot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:3px;vertical-align:middle}
 .lbar{width:16px;height:5px;border-radius:2px;display:inline-block;margin-right:3px;vertical-align:middle}
 @media (max-width:640px){
   body{padding:0 8px 16px}
   h1{font-size:16px;margin-top:10px;text-align:center}
-  .sub{font-size:11px;padding:0 4px}
-  .row{width:100%;gap:8px;justify-content:center;margin-top:10px}
-  .btn,.preset-btn{min-height:40px;padding:8px 14px;font-size:13px}
+  .sub{font-size:12px;padding:0 4px}
+  .row{width:100%;gap:8px;justify-content:center;margin-top:10px;font-size:13px}
+  .btn,.preset-btn{min-height:44px;padding:8px 14px;font-size:13px}
   .controls{gap:10px;width:100%}
   .hinge-ctrl{padding:10px 12px;min-width:0;flex:0 1 auto}
   .hinge-label{font-size:12px}
   .dir-btns{gap:6px}
-  .dir-btn{width:40px;height:40px;min-height:40px;font-size:16px}
-  .dir-val{font-size:11px}
-  input[type=range]{width:100%;height:28px}
-  .legend{flex-wrap:wrap;gap:6px 12px;justify-content:center;font-size:10px;padding:0 4px;text-align:center}
+  .dir-btn{width:44px;height:44px;min-height:44px;font-size:16px}
+  .dir-val{font-size:12px}
+  input[type=range]{width:100%;height:44px}
+  .legend{flex-wrap:wrap;gap:6px 12px;justify-content:center;font-size:12px;padding:0 4px;text-align:center}
+  .preset-label{font-size:13px}
+  .angle-val{font-size:13px}
 }
 @media (max-width:380px){
   .btn,.preset-btn{padding:8px 12px;font-size:13px}
@@ -60,7 +64,7 @@ input[type=range]{width:120px;accent-color:#E74C3C;background:#1A2030}
 
 <!-- Preset row -->
 <div class="row">
-  <span style="color:#5D6D7E;font-size:10px">Presets:</span>
+  <span class="preset-label">Presets:</span>
   <button class="preset-btn" data-preset="flat">Flat</button>
   <button class="preset-btn" data-preset="contract">Contract</button>
   <button class="preset-btn" data-preset="expand">Expand</button>
@@ -114,7 +118,7 @@ input[type=range]{width:120px;accent-color:#E74C3C;background:#1A2030}
   <button class="btn" id="bm">Manual</button>
   <span style="color:#777">Bend:</span>
   <input type="range" id="sl" min="0" max="100" value="0" disabled>
-  <span id="al" style="color:#E74C3C;font-family:monospace;font-size:11px;min-width:28px">0°</span>
+  <span id="al" class="angle-val">0°</span>
 </div>
 <div class="legend">
   <span><span class="lbar" style="background:linear-gradient(90deg,#2471A3,#3498DB)"></span>Half-segment (length fixed = L/2)</span>

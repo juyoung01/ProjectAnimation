@@ -24,16 +24,20 @@ input[type=range]{width:120px;accent-color:#E74C3C}
 .ldot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:3px;vertical-align:middle}
 .lbar{width:16px;height:5px;border-radius:2px;display:inline-block;margin-right:3px;vertical-align:middle}
 .mode-desc{font-size:10px;color:#5D6D7E;margin-top:2px;min-height:14px;text-align:center}
+.mode-label{color:#5D6D7E;font-size:10px}
+#al{color:#E74C3C;font-family:monospace;font-size:11px;min-width:28px}
 @media (max-width:640px){
   body{padding:0 8px 16px}
   h1{font-size:15px;margin-top:10px;text-align:center}
-  .sub{font-size:11px;padding:0 4px}
+  .sub{font-size:12px;padding:0 4px}
   .row{width:100%;gap:8px;justify-content:center;margin-top:8px}
-  .btn,.mode-btn{min-height:40px;padding:8px 14px;font-size:13px}
-  select{min-height:40px;padding:6px 10px;font-size:13px}
-  input[type=range]{width:100%;height:28px}
-  .legend{flex-wrap:wrap;gap:6px 12px;justify-content:center;font-size:10px;padding:0 4px;text-align:center}
-  .mode-desc{font-size:11px}
+  .btn,.mode-btn{min-height:44px;padding:8px 14px;font-size:13px}
+  select{min-height:44px;padding:6px 10px;font-size:13px}
+  input[type=range]{width:100%;height:44px}
+  .legend{flex-wrap:wrap;gap:6px 12px;justify-content:center;font-size:12px;padding:0 4px;text-align:center}
+  .mode-desc{font-size:12px}
+  .mode-label{font-size:13px}
+  #al{font-size:13px}
 }
 @media (max-width:380px){
   .btn,.mode-btn{padding:8px 12px;font-size:13px}
@@ -47,7 +51,7 @@ input[type=range]{width:120px;accent-color:#E74C3C}
 <canvas id="c"></canvas>
 
 <div class="row" id="modes">
-  <span style="color:#5D6D7E;font-size:10px">Mode:</span>
+  <span class="mode-label">Mode:</span>
   <button class="mode-btn active" data-mode="auxetic">Auxetic</button>
   <button class="mode-btn" data-mode="shear">Shear</button>
   <button class="mode-btn" data-mode="scale">Scale</button>
@@ -63,7 +67,7 @@ input[type=range]{width:120px;accent-color:#E74C3C}
   <button class="btn" id="bm">Manual</button>
   <span style="color:#777">Bend:</span>
   <input type="range" id="sl" min="0" max="100" value="0" disabled>
-  <span id="al" style="color:#E74C3C;font-family:monospace;font-size:11px;min-width:28px">0°</span>
+  <span id="al">0°</span>
   <span style="color:#444">|</span>
   <span style="color:#777">Grid:</span>
   <select id="gs">
