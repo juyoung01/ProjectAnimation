@@ -47,7 +47,7 @@ input[type=range]{width:120px;accent-color:#E74C3C}
 </head>
 <body>
 <h1>Hinge Lattice — Constraint-Based Shape Morphing</h1>
-<p class="sub">힌지 꺾임(θ) → 유효거리 단축(L·cosθ/2) → PBD solver로 꼭지점 이동 → 반절 세그먼트 길이 L/2 항상 유지</p>
+<p class="sub">Hinge bending (θ) → effective-distance shortening (L·cosθ/2) → PBD solver moves vertices → half-segment L/2 always maintained</p>
 <canvas id="c"></canvas>
 
 <div class="row" id="modes">
@@ -98,13 +98,13 @@ document.getElementById('bm').onclick = () => { auto=false; document.getElementB
 sl.oninput = () => { param = sl.value / 100; };
 
 const modeDescs = {
-  auxetic: 'Auxetic — 체커보드 패턴, 균일 수축',
-  shear: 'Shear — 모든 힌지 같은 방향 → 대각선 전단',
-  scale: 'Scale — 바깥 힌지 반전 → 확장',
-  aniso: 'Aniso — 수평 힌지만 작동 → 수직 수축',
-  bend: 'Bend — 행별 점진적 꺾임 → 곡률',
-  twist: 'Twist — 대각선 의존 패턴 → 회전',
-  zigzag: 'Zigzag — 행 교대 → 아코디언'
+  auxetic: 'Auxetic — checkerboard hinge pattern, uniform contraction',
+  shear: 'Shear — all hinges same direction → diagonal shear',
+  scale: 'Scale — hinges inverted outward → expansion',
+  aniso: 'Aniso — horizontal hinges only → horizontal contraction',
+  bend: 'Bend — gradual bending per row → curvature',
+  twist: 'Twist — diagonal-dependent pattern → rotation',
+  zigzag: 'Zigzag — alternating rows → accordion'
 };
 
 document.querySelectorAll('.mode-btn').forEach(btn => {
