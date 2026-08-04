@@ -1,3 +1,9 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Filament Gliding — 힌지 밀기·전진 애니메이션</title>
 <style>
 body{margin:0;padding:0;background:white;font-family:system-ui,sans-serif}
 svg text{font-family:system-ui,sans-serif}
@@ -6,7 +12,20 @@ svg text{font-family:system-ui,sans-serif}
 .cr button.on-bl{background:#E6F1FB;color:#185FA5;border-color:#85B7EB}
 .cr button.on-uv{background:#F3E8FF;color:#7C3AED;border-color:#C4B5FD}
 .pl{display:inline-block;font-size:11px;padding:2px 8px;border-radius:4px;font-weight:500;background:#f0f0f0;color:#666}
+html,body{max-width:100%;overflow-x:hidden;-webkit-text-size-adjust:100%}
+body>svg{display:block;width:100%;height:auto}
+@media (max-width:640px){
+  .cr{margin:10px 0 14px;padding:0 10px;gap:8px;justify-content:center}
+  .cr button{flex:1 1 auto;min-width:0;min-height:44px;padding:10px 14px;font-size:14px}
+  .pl{font-size:13px;padding:6px 10px}
+}
+@media (max-width:380px){
+  .cr button{flex-basis:100%}
+  .pl{flex-basis:100%;text-align:center;box-sizing:border-box}
+}
 </style>
+</head>
+<body>
 
 <svg width="100%" viewBox="0 0 640 290">
   <defs>
@@ -227,3 +246,5 @@ buildHinges(true);
 buildBinders();
 buildClashIndicators();
 </script>
+</body>
+</html>

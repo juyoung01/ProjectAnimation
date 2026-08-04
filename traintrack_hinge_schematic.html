@@ -2,13 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Train Track Hinge — 1D Contraction/Expansion</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#0B0F14;color:#E0E0E0;font-family:'Segoe UI',sans-serif;display:flex;flex-direction:column;align-items:center;height:100vh;overflow:hidden}
+html,body{max-width:100%;overflow-x:hidden;-webkit-text-size-adjust:100%}
+body{background:#0B0F14;color:#E0E0E0;font-family:'Segoe UI',sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;min-height:100svh;overflow-x:hidden}
 h1{margin-top:14px;font-size:18px;font-weight:600}
 .sub{font-size:10px;color:#7F8C8D;margin-top:2px}
-canvas{margin-top:8px}
+canvas{margin-top:8px;max-width:100%;height:auto}
 .row{display:flex;gap:10px;align-items:center;margin-top:10px;font-size:11px}
 .btn{padding:5px 16px;border:1px solid #444;background:none;color:#aaa;border-radius:4px;cursor:pointer;font-size:11px;transition:all 0.2s;font-weight:600}
 .btn:hover{border-color:#E74C3C;color:#E74C3C}
@@ -17,6 +19,16 @@ canvas{margin-top:8px}
 .btn-uv:hover,.btn-uv.on{background:#7C3AED;color:#fff;border-color:#7C3AED}
 .btn-blue{border-color:#3B82F6;color:#3B82F6}
 .btn-blue:hover,.btn-blue.on{background:#3B82F6;color:#fff;border-color:#3B82F6}
+@media (max-width:640px){
+  body{padding:0 8px 16px}
+  h1{font-size:16px;margin-top:12px;text-align:center}
+  .sub{font-size:11px;text-align:center;padding:0 4px}
+  .row{width:100%;flex-wrap:wrap;justify-content:center;gap:8px}
+  .btn{min-height:40px;padding:10px 14px;font-size:13px}
+}
+@media (max-width:380px){
+  .btn{padding:10px 12px;font-size:12px}
+}
 </style>
 </head>
 <body>
@@ -31,7 +43,7 @@ canvas{margin-top:8px}
 <script>
 const C = document.getElementById('c'), X = C.getContext('2d');
 let W, H;
-function resize() { W = C.width = Math.min(window.innerWidth - 20, 1100); H = C.height = Math.min(window.innerHeight - 120, 500); }
+function resize() { W = C.width = Math.max(280, Math.min(window.innerWidth - 20, 1100)); H = C.height = Math.max(300, Math.min(window.innerHeight - 120, 500)); }
 resize(); window.addEventListener('resize', resize);
 
 let bend = 0, targetBend = 0, autoMode = true, autoTime = 0, pulse = 0;

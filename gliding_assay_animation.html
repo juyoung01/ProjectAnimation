@@ -1,10 +1,36 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gliding Assay — Light-Driven Hinge Pushing a Filament</title>
 <style>
+  :root{
+    --color-background-secondary:#e8e8e8;
+    --color-border-secondary:#ccc;
+    --color-text-primary:#222;
+    --color-text-secondary:#555;
+    --border-radius-md:6px;
+  }
+  html,body{max-width:100%;overflow-x:hidden;-webkit-text-size-adjust:100%}
+  body{margin:0;padding:16px;background:#fff;color:var(--color-text-primary);font-family:'Segoe UI',system-ui,-apple-system,sans-serif}
+  body>svg{display:block;width:100%;height:auto}
+  .ts{font-size:12px;fill:var(--color-text-secondary)}
   .cr{display:flex;align-items:center;gap:10px;margin:10px 0 0;flex-wrap:wrap}
   .cr button{min-width:120px;padding:7px 14px;font-size:13px}
   .cr button.on-uv{background:#F3E8FF;color:#7C3AED;border-color:#C4B5FD}
   .cr button.on-bl{background:#E6F1FB;color:#185FA5;border-color:#85B7EB}
   .pl{display:inline-block;font-size:12px;padding:3px 10px;border-radius:var(--border-radius-md);font-weight:500;background:var(--color-background-secondary);color:var(--color-text-secondary)}
+
+  @media (max-width:640px){
+    body{padding:10px}
+    .cr{justify-content:center;gap:8px;margin-top:12px}
+    .cr button{min-width:0;flex:1 1 170px;max-width:100%;min-height:40px;padding:10px 12px;font-size:13px;line-height:1.25}
+    .pl{font-size:13px;padding:8px 12px}
+  }
 </style>
+</head>
+<body>
 
 <svg width="100%" viewBox="0 0 680 380">
   <defs>
@@ -330,3 +356,5 @@ buildHinges(true);
 buildBinders();
 buildClashIndicators();
 </script>
+</body>
+</html>

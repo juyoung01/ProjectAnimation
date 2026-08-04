@@ -2,10 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Flagellum: Sliding vs Bending</title>
 <style>
-  body { margin: 0; background: #fff; display: flex; justify-content: center; align-items: center; height: 100vh; }
+  html,body{max-width:100%;overflow-x:hidden;-webkit-text-size-adjust:100%}
+  body { margin: 0; background: #fff; display: flex; justify-content: center; align-items: center; min-height: 100vh; min-height: 100svh; }
+  #scene { display: block; width: 100%; min-width: 0; max-width: 960px; height: auto; margin-inline: auto; }
   .label { font-family: 'Arial', sans-serif; font-weight: bold; }
+  @media (max-width: 640px) {
+    body { align-items: center; padding: 8px; box-sizing: border-box; }
+  }
 </style>
 </head>
 <body>
