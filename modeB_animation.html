@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mode B — double-hinge chiral twist</title>
+<style>
+:root{--paper:#FCFCFA;--ink:#1A1A1A;--sub:#5C6068;--card:#FFF;--line:#E3E3DF;
+ --teal:#1B7F72;--orng:#E2662F;--navy:#3D5A80;--ambr:#E9B44C;--grey:#8A8F98;--vio:#6C5CE7;--red:#C0392B}
+@media(prefers-color-scheme:dark){:root{--paper:#14161A;--ink:#E8E8E6;--sub:#9AA0A8;--card:#1B1E23;--line:#2C3037}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+ font:15px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:32px 20px 60px}
+.wrap{max-width:1180px;margin:0 auto}
+h1{font-size:23px;font-weight:650;letter-spacing:-.02em;margin:0 0 4px}
+.sub{color:var(--sub);font-size:14.5px;margin:0 0 24px;max-width:80ch}
+.layout{display:grid;grid-template-columns:1fr 340px;gap:22px;align-items:start}
+@media(max-width:900px){.layout{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:18px 20px}
+.stage{padding:8px;position:relative}
+#view{width:100%;height:auto;display:block;cursor:grab;touch-action:none}
+#view.drag{cursor:grabbing}
+.badge{position:absolute;top:16px;left:18px;font-size:12.5px;font-weight:650;letter-spacing:.03em;
+ padding:5px 12px;border-radius:20px}
+h3{font-size:12.5px;font-weight:650;text-transform:uppercase;letter-spacing:.05em;color:var(--sub);margin:0 0 12px}
+.btnrow{display:flex;gap:8px;margin-bottom:16px}
+button{flex:1;font:inherit;font-size:13.5px;font-weight:600;padding:10px 6px;border-radius:9px;
+ border:1.5px solid var(--line);background:transparent;color:var(--ink);cursor:pointer;transition:.15s}
+button:hover{border-color:var(--sub)}
+button.on{color:#fff;border-color:transparent}
+button.s0.on{background:var(--teal)} button.s1.on{background:var(--orng)}
+button.wide{flex:none;width:100%;margin-bottom:10px}
+label.row{display:flex;justify-content:space-between;font-size:13px;color:var(--sub);margin:14px 0 5px}
+label.row b{color:var(--ink);font-variant-numeric:tabular-nums;font-family:ui-monospace,Menlo,monospace}
+input[type=range]{width:100%;accent-color:var(--vio)}
+.chk{display:flex;align-items:center;gap:8px;font-size:13px;margin:7px 0;cursor:pointer}
+.chk input{accent-color:var(--navy)}
+table{border-collapse:collapse;width:100%;font-size:13px;margin-top:4px}
+td{padding:5px 0;border-bottom:1px solid var(--line)}
+td:last-child{text-align:right;font-family:ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}
+td.lab{color:var(--sub)}
+.warnbox{margin-top:14px;font-size:12.8px;line-height:1.5;padding:10px 12px;border-radius:9px;
+ border-left:3px solid var(--ambr);background:color-mix(in srgb,var(--ambr) 12%,transparent);display:none}
+.warnbox.show{display:block}
+.note{font-size:12.8px;color:var(--sub);line-height:1.55;margin-top:14px}
+</style></head><body><div class="wrap">
+
+<h1>Mode B — the double-hinge chiral twist, animated</h1>
+<p class="sub">Six vertices pinned in space. Each edge is a short arm rigidly fused to the hub, a hinge, a central bar, a second hinge, and a second arm.
+The only freedom is that every hub turns in place. Drag the cage to look around; drive it with light, or sweep θ by hand to see why the untwisted state cannot exist.</p>
+
+<div class="layout">
+<div class="card stage"><div class="badge" id="badge"></div><svg id="view" viewBox="0 0 760 620" role="img"><title>Octahedral cage with double-hinge edges, animated</title></svg></div>
+
+<div>
+<div class="card" style="margin-bottom:16px">
+<h3>Drive</h3>
+<div class="btnrow">
+<button class="s0" id="b0">450 nm · state 0</button>
+<button class="s1" id="b1">365 nm · state 1</button>
+</div>
+<button class="wide" id="bcyc">Cycle ⟳</button>
+<label class="row"><span>hub twist θ &nbsp;<span style="opacity:.6">(manual sweep)</span></span><b id="rt">+20.0°</b></label>
+<input type="range" id="sl" min="-40" max="40" step="0.25" value="20">
+<label class="row" style="margin-top:16px"><span>arm length p</span><b id="rp">D/4</b></label>
+<input type="range" id="slp" min="0.12" max="0.45" step="0.005" value="0.25">
+<div class="note" style="margin-top:10px">p is the fused arm, as a fraction of the edge. Shorter arms need more contour excess for the same twist.</div>
+</div>
+
+<div class="card" style="margin-bottom:16px">
+<h3>Show</h3>
+<label class="chk"><input type="checkbox" id="cRef" checked> undistorted octahedron</label>
+<label class="chk"><input type="checkbox" id="cTick" checked> hub fiducial ticks</label>
+<label class="chk"><input type="checkbox" id="cHinge" checked> hinges</label>
+<label class="chk"><input type="checkbox" id="cNode" checked> node inset (pinwheel)</label>
+<label class="chk"><input type="checkbox" id="cPlot" checked> bar-length curve</label>
+</div>
+
+<div class="card">
+<h3>Readout</h3>
+<table>
+<tr><td class="lab">hub position drift</td><td id="oPos" style="color:var(--teal)">0.000 R</td></tr>
+<tr><td class="lab">hub axis tilt</td><td id="oAx" style="color:var(--teal)">0.00°</td></tr>
+<tr><td class="lab">hub twist</td><td id="oTw" style="color:var(--vio)">+20.0°</td></tr>
+<tr><td class="lab">bar span required</td><td id="oSpan">0.7482</td></tr>
+<tr><td class="lab">bar built at</td><td id="oQ">0.7482</td></tr>
+<tr><td class="lab">misfit</td><td id="oMis">0.0000</td></tr>
+<tr><td class="lab">hinge bend</td><td id="oBend">27.3°</td></tr>
+<tr><td class="lab">contour excess</td><td id="oExc">2.91 %</td></tr>
+<tr><td class="lab">edge-midpoint radius</td><td id="oMid">0.6964 R</td></tr>
+</table>
+<div class="warnbox" id="warn"><b>Bar does not fit.</b> The rigid central bar is longer than the gap it has to span, so it must bow and the cage must strain. This is every θ except ±θ*, and it is why only two states exist.</div>
+</div>
+</div>
+</div>
+
+<div class="card" style="margin-top:22px">
+<h3>What the animation is showing</h3>
+<div class="note" style="font-size:13.5px;max-width:88ch;margin-top:0">
+Each hub turns about its own outward axis and nothing else — the six vertex coordinates and the six axis directions never change,
+which is the whole point: the LHD fusion sites stay exactly where a lattice needs them. Because the hub is rigid, the two arms facing
+each other across it sweep in opposite directions, so the net force on the hub is zero and only torque comes out. That torque is the
+signal a neighbouring cage would feel.
+<br><br>
+The central bar is built at one fixed length. Sweep θ by hand and watch the required span: it is <b>smallest at θ = 0</b> and grows with
+|θ| in either direction. So a bar cut to fit at +θ* also fits at −θ*, and fits nowhere else. The untwisted cage is not a high-energy
+intermediate — the bar is simply too long to assemble it. Two states, from rigid-link geometry alone.
+</div>
+</div>
+
+</div>
+<script>
+(function(){
+const R=1, D=Math.SQRT2;
+const AXv=[[1,0,0],[0,1,0],[0,0,1]];
+const Vs=[]; for(let i=0;i<3;i++) for(const e of [1,-1]) Vs.push([i,e]);
+const vv=v=>AXv[v[0]].map(c=>c*v[1]*R);
+const Es=[]; for(let a=0;a<6;a++) for(let b=a+1;b<6;b++) if(Vs[a][0]!==Vs[b][0]) Es.push([a,b]);
+
+const sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]];
+const add=(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]];
+const mul=(a,s)=>[a[0]*s,a[1]*s,a[2]*s];
+const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+const nrm=a=>Math.hypot(a[0],a[1],a[2]);
+const unit=a=>{const n=nrm(a);return n<1e-12?[0,0,0]:mul(a,1/n)};
+function rotM(ax,t){const a=unit(ax),c=Math.cos(t),s=Math.sin(t),C=1-c,[x,y,z]=a;
+ return [[c+x*x*C,x*y*C-z*s,x*z*C+y*s],[y*x*C+z*s,c+y*y*C,y*z*C-x*s],[z*x*C-y*s,z*y*C+x*s,c+z*z*C]];}
+const mv=(M,v)=>[dot(M[0],v),dot(M[1],v),dot(M[2],v)];
+const mm=(A,B)=>A.map(r=>[0,1,2].map(j=>r[0]*B[0][j]+r[1]*B[1][j]+r[2]*B[2][j]));
+
+let az=0.55, elev=0.34, S=182, CX=330, CY=322;
+function View(){return mm(rotM([1,0,0],-elev), rotM([0,0,1],az));}
+function prj(P,V){const q=mv(V,P);return [CX+S*q[0], CY-S*q[2], q[1]];}
+
+const P0=0.25;                       // p / D  default
+let pFrac=P0, theta=20*Math.PI/180, qBuilt=null, THSTAR=20*Math.PI/180;
+function geom(th,pf){
+ const p=pf*D, out=[];
+ for(const [a,b] of Es){
+  const A=vv(Vs[a]), B=vv(Vs[b]);
+  const nA=unit(A), nB=unit(B);
+  const H1=add(A, mul(mv(rotM(nA,th), mul(sub(B,A),1/D)), p));
+  const H2=add(B, mul(mv(rotM(nB,th), mul(sub(A,B),1/D)), p));
+  out.push({a,b,A,B,H1,H2,span:nrm(sub(H2,H1))});
+ }
+ return out;
+}
+const spanOf=(th,pf)=>geom(th,pf)[0].span;
+function solveStar(pf){ // theta where span == qBuilt
+ let lo=0, hi=Math.PI*0.42;
+ for(let k=0;k<60;k++){const m=(lo+hi)/2; if(spanOf(m,pf)<qBuilt) lo=m; else hi=m;}
+ return (lo+hi)/2;
+}
+qBuilt = spanOf(THSTAR,P0);
+
+const svg=document.getElementById('view');
+const NS='http://www.w3.org/2000/svg';
+function el(t,at){const e=document.createElementNS(NS,t);for(const k in at)e.setAttribute(k,at[k]);return e;}
+const cvar=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+function draw(){
+ const V=View(), g=geom(theta,pFrac), p=pFrac*D;
+ const st = theta>=0 ? 1 : 0;
+ const col = st? cvar('--orng') : cvar('--teal');
+ const misfit = qBuilt - g[0].span;          // >0 -> bar too long
+ const bad = Math.abs(misfit) > 1e-4;
+ svg.textContent='';
+ const items=[];
+
+ if(document.getElementById('cRef').checked)
+  for(const [a,b] of Es){const A=prj(vv(Vs[a]),V), B=prj(vv(Vs[b]),V);
+   items.push({d:-99,f:()=>svg.appendChild(el('line',{x1:A[0],y1:A[1],x2:B[0],y2:B[1],
+    stroke:cvar('--grey'),'stroke-width':1.1,'stroke-dasharray':'5 5',opacity:.42}))});}
+
+ for(const e of g){
+  const pts=[e.A,e.H1,e.H2,e.B].map(P=>prj(P,V));
+  const d=(pts[0][2]+pts[1][2]+pts[2][2]+pts[3][2])/4;
+  items.push({d,f:()=>{
+   const back=d<-0.05, op=back?0.24:1;
+   // arms
+   for(const [u,w] of [[0,1],[2,3]])
+    svg.appendChild(el('line',{x1:pts[u][0],y1:pts[u][1],x2:pts[w][0],y2:pts[w][1],
+     stroke:col,'stroke-width':back?2.2:3.1,'stroke-linecap':'round',opacity:op}));
+   // central bar - bows when it does not fit
+   const barCol = bad ? cvar('--ambr') : col;
+   if(bad){
+    const mid=[(pts[1][0]+pts[2][0])/2,(pts[1][1]+pts[2][1])/2];
+    const rad=unit(mul(add(e.H1,e.H2),0.5)), off=prj(add(mul(add(e.H1,e.H2),0.5), mul(rad, Math.max(0,misfit)*2.2)),V);
+    svg.appendChild(el('path',{d:`M ${pts[1][0]} ${pts[1][1]} Q ${2*off[0]-mid[0]} ${2*off[1]-mid[1]} ${pts[2][0]} ${pts[2][1]}`,
+     fill:'none',stroke:barCol,'stroke-width':back?2.6:3.6,'stroke-linecap':'round',opacity:op}));
+   } else {
+    svg.appendChild(el('line',{x1:pts[1][0],y1:pts[1][1],x2:pts[2][0],y2:pts[2][1],
+     stroke:barCol,'stroke-width':back?2.6:3.6,'stroke-linecap':'round',opacity:op}));
+   }
+   if(document.getElementById('cHinge').checked)
+    for(const q of [pts[1],pts[2]])
+     svg.appendChild(el('circle',{cx:q[0],cy:q[1],r:back?2.9:3.9,fill:cvar('--red'),opacity:op}));
+  }});
+ }
+
+ for(let k=0;k<6;k++){
+  const Pv=vv(Vs[k]), q=prj(Pv,V);
+  items.push({d:q[2],f:()=>{
+   const back=q[2]<-0.05, op=back?0.26:1;
+   svg.appendChild(el('circle',{cx:q[0],cy:q[1],r:back?7.5:9.6,fill:cvar('--paper'),
+    stroke:cvar('--navy'),'stroke-width':2.7,opacity:op}));
+   if(document.getElementById('cTick').checked){
+    const ax=unit(Pv);
+    let ref=Math.abs(ax[2])<0.9?[0,0,1]:[1,0,0];
+    const t0=unit(cross(ax,ref)), t=mv(rotM(ax,theta),t0);
+    const e2=prj(add(Pv,mul(t,0.26)),V);
+    svg.appendChild(el('line',{x1:q[0],y1:q[1],x2:e2[0],y2:e2[1],
+     stroke:cvar('--vio'),'stroke-width':3,'stroke-linecap':'round',opacity:op}));
+   }
+  }});
+ }
+ items.sort((x,y)=>x.d-y.d).forEach(o=>o.f());
+
+ // --- node inset : looking down one hub axis
+ if(document.getElementById('cNode').checked){
+  const cx=636,cy=118,r=58;
+  svg.appendChild(el('circle',{cx,cy,r:r+6,fill:cvar('--paper'),stroke:cvar('--line'),'stroke-width':1.2}));
+  for(let k=0;k<4;k++){
+   const a0=k*Math.PI/2, a1=a0+theta;
+   svg.appendChild(el('line',{x1:cx,y1:cy,x2:cx+r*Math.cos(a0),y2:cy+r*Math.sin(a0),
+    stroke:cvar('--grey'),'stroke-width':1.6,'stroke-dasharray':'4 4',opacity:.4}));
+   svg.appendChild(el('line',{x1:cx,y1:cy,x2:cx+r*Math.cos(a1),y2:cy+r*Math.sin(a1),
+    stroke:col,'stroke-width':3,'stroke-linecap':'round'}));
+   const m0=r*0.82;
+   svg.appendChild(el('path',{d:`M ${cx+m0*Math.cos(a0)} ${cy+m0*Math.sin(a0)} A ${m0} ${m0} 0 0 ${theta>0?1:0} ${cx+m0*Math.cos(a1)} ${cy+m0*Math.sin(a1)}`,
+    fill:'none',stroke:cvar('--vio'),'stroke-width':2.2,'stroke-linecap':'round'}));
+  }
+  svg.appendChild(el('circle',{cx,cy,r:13,fill:cvar('--paper'),stroke:cvar('--navy'),'stroke-width':2.8}));
+  for(const [dy,txt] of [[26,'down the hub axis'],[42,'facing arms oppose']]){
+   const tx=el('text',{x:cx,y:cy+r+dy,'text-anchor':'middle','font-size':11.5,fill:cvar('--sub')});
+   tx.textContent=txt; svg.appendChild(tx);}
+ }
+
+ // --- live span curve
+ if(document.getElementById('cPlot').checked){
+  const x0=548,y0=418,w=182,h=112, tmin=-40,tmax=40;
+  const sm=[]; for(let t=tmin;t<=tmax;t+=1) sm.push(spanOf(t*Math.PI/180,pFrac));
+  const qmin=Math.min(...sm), qmax=Math.max(...sm)*1.02;
+  const X=t=>x0+(t-tmin)/(tmax-tmin)*w, Y=s=>y0+h-(s-qmin)/(qmax-qmin+1e-9)*h;
+  svg.appendChild(el('rect',{x:x0,y:y0,width:w,height:h,fill:'none',stroke:cvar('--line'),'stroke-width':1.2}));
+  let dd='M '+sm.map((s,i)=>`${X(tmin+i).toFixed(1)},${Y(s).toFixed(1)}`).join(' L ');
+  svg.appendChild(el('path',{d:dd,fill:'none',stroke:cvar('--ink'),'stroke-width':2}));
+  svg.appendChild(el('line',{x1:x0,y1:Y(qBuilt),x2:x0+w,y2:Y(qBuilt),stroke:cvar('--red'),
+   'stroke-width':1.8,'stroke-dasharray':'7 5'}));
+  const ts=solveStar(pFrac)*180/Math.PI;
+  for(const [s,c,lb] of [[-ts,cvar('--teal'),'−θ*'],[ts,cvar('--orng'),'+θ*']])
+   if(s>=tmin&&s<=tmax){
+    svg.appendChild(el('circle',{cx:X(s),cy:Y(qBuilt),r:5,fill:c}));
+    const t=el('text',{x:X(s),y:Y(qBuilt)-9,'text-anchor':'middle','font-size':11,'font-weight':600,fill:c});
+    t.textContent=lb; svg.appendChild(t);}
+  const z=Y(sm[40]);
+  svg.appendChild(el('line',{x1:X(0)-5,y1:z-5,x2:X(0)+5,y2:z+5,stroke:cvar('--ambr'),'stroke-width':2.4}));
+  svg.appendChild(el('line',{x1:X(0)-5,y1:z+5,x2:X(0)+5,y2:z-5,stroke:cvar('--ambr'),'stroke-width':2.4}));
+  const tz=el('text',{x:X(0),y:z+17,'text-anchor':'middle','font-size':10.5,'font-weight':600,fill:cvar('--ambr')});
+  tz.textContent='θ=0 · too short'; svg.appendChild(tz);
+  svg.appendChild(el('circle',{cx:X(theta*180/Math.PI),cy:Y(g[0].span),r:4.5,
+   fill:'none',stroke:bad?cvar('--ambr'):cvar('--ink'),'stroke-width':2.4}));
+  const t1=el('text',{x:x0+w/2,y:y0+h+18,'text-anchor':'middle','font-size':11.5,fill:cvar('--sub')});
+  t1.textContent='required bar span vs θ'; svg.appendChild(t1);
+  for(const [tt,lb] of [[tmin,'−40°'],[0,'0'],[tmax,'+40°']]){
+   const t=el('text',{x:X(tt),y:y0+h+34,'text-anchor':'middle','font-size':10.5,fill:cvar('--grey')});
+   t.textContent=lb; svg.appendChild(t);}
+  const t2=el('text',{x:x0+4,y:Y(qBuilt)-7,'font-size':11,fill:cvar('--red')});
+  t2.textContent='built length'; svg.appendChild(t2);
+ }
+
+ // readouts
+ const u=unit(sub(g[0].H1,g[0].A)), wv=unit(sub(g[0].H2,g[0].H1));
+ const bend=Math.acos(Math.max(-1,Math.min(1,dot(u,wv))))*180/Math.PI;
+ const midr=nrm(mul(add(g[0].H1,g[0].H2),0.5));
+ const exc=(2*p+g[0].span)/D-1;
+ const deg=theta*180/Math.PI;
+ document.getElementById('rt').textContent=(deg>=0?'+':'')+deg.toFixed(1)+'°';
+ document.getElementById('rp').textContent='D × '+pFrac.toFixed(3);
+ document.getElementById('oTw').textContent=(deg>=0?'+':'')+deg.toFixed(1)+'°';
+ document.getElementById('oSpan').textContent=g[0].span.toFixed(4);
+ document.getElementById('oQ').textContent=qBuilt.toFixed(4);
+ document.getElementById('oMis').textContent=(misfit>=0?'+':'')+misfit.toFixed(4);
+ document.getElementById('oMis').style.color = bad? cvar('--ambr') : cvar('--teal');
+ document.getElementById('oBend').textContent=bend.toFixed(1)+'°';
+ document.getElementById('oExc').textContent=(100*exc).toFixed(2)+' %';
+ document.getElementById('oMid').textContent=midr.toFixed(4)+' R';
+ document.getElementById('warn').className = bad? 'warnbox show':'warnbox';
+ const bd=document.getElementById('badge');
+ const ts2=solveStar(pFrac)*180/Math.PI;
+ if(bad){bd.textContent='strained — not a state';bd.style.background='color-mix(in srgb,'+cvar('--ambr')+' 22%,transparent)';bd.style.color=cvar('--ambr');}
+ else {bd.textContent = st? 'state 1 · +'+ts2.toFixed(1)+'°' : 'state 0 · −'+ts2.toFixed(1)+'°';
+  bd.style.background='color-mix(in srgb,'+col+' 18%,transparent)';bd.style.color=col;}
+ document.getElementById('b0').className='s0'+(!bad&&!st?' on':'');
+ document.getElementById('b1').className='s1'+(!bad&&st?' on':'');
+}
+
+// --- interaction
+let anim=null;
+function snapTo(sign){
+ const target=sign*solveStar(pFrac);
+ if(anim) cancelAnimationFrame(anim);
+ const t0=theta, dt=target-t0; let k=0;
+ (function step(){k+=1/22; const e=k<1?(1-Math.pow(1-k,3)):1;
+  theta=t0+dt*e; document.getElementById('sl').value=(theta*180/Math.PI).toFixed(2); draw();
+  if(k<1) anim=requestAnimationFrame(step);})();
+}
+document.getElementById('b0').onclick=()=>snapTo(-1);
+document.getElementById('b1').onclick=()=>snapTo(1);
+let cyc=null;
+document.getElementById('bcyc').onclick=function(){
+ if(cyc){clearInterval(cyc);cyc=null;this.textContent='Cycle ⟳';return;}
+ this.textContent='Stop ■'; let s=theta>=0?-1:1; snapTo(s);
+ cyc=setInterval(()=>{s=-s;snapTo(s);},1500);
+};
+document.getElementById('sl').oninput=e=>{if(anim)cancelAnimationFrame(anim);theta=+e.target.value*Math.PI/180;draw();};
+document.getElementById('slp').oninput=e=>{pFrac=+e.target.value; qBuilt=spanOf(THSTAR,pFrac); draw();};
+['cRef','cTick','cHinge','cNode','cPlot'].forEach(id=>document.getElementById(id).onchange=draw);
+let dg=false,px=0,py=0;
+svg.addEventListener('pointerdown',e=>{dg=true;px=e.clientX;py=e.clientY;svg.classList.add('drag');svg.setPointerCapture(e.pointerId);});
+svg.addEventListener('pointermove',e=>{if(!dg)return;
+ az+=(e.clientX-px)*0.008;
+ elev=Math.max(-1.3,Math.min(1.3,elev+(e.clientY-py)*0.006));
+ px=e.clientX;py=e.clientY;draw();});
+svg.addEventListener('pointerup',e=>{dg=false;svg.classList.remove('drag');});
+svg.addEventListener('pointercancel',e=>{dg=false;svg.classList.remove('drag');});
+window.addEventListener('resize',draw);
+draw();
+})();
+</script></body></html>
