@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Model A in 3D — a 3×3×3 block of even-prism cages</title>
+<style>
+:root{--paper:#FCFCFA;--ink:#1A1A1A;--sub:#5C6068;--card:#FFF;--line:#E3E3DF;
+ --teal:#1B7F72;--orng:#E2662F;--navy:#3D5A80;--ambr:#E9B44C;--grey:#8A8F98;--vio:#6C5CE7;--red:#C0392B}
+@media(prefers-color-scheme:dark){:root{--paper:#14161A;--ink:#E8E8E6;--sub:#9AA0A8;--card:#1B1E23;--line:#2C3037}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+ font:15px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:32px 20px 60px}
+.wrap{max-width:1180px;margin:0 auto}
+h1{font-size:23px;font-weight:650;letter-spacing:-.02em;margin:0 0 4px}
+.sub{color:var(--sub);font-size:14.5px;margin:0 0 24px;max-width:84ch}
+.layout{display:grid;grid-template-columns:1fr 340px;gap:22px;align-items:start}
+@media(max-width:900px){.layout{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:18px 20px}
+.stage{padding:8px;position:relative}
+#view{width:100%;height:auto;display:block;cursor:grab;touch-action:none}
+#view.drag{cursor:grabbing}
+.badge{display:none}
+h3{font-size:12.5px;font-weight:650;text-transform:uppercase;letter-spacing:.05em;color:var(--sub);margin:0 0 12px}
+.btnrow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px}
+button{font:inherit;font-size:12.5px;font-weight:600;padding:9px 4px;border-radius:9px;
+ border:1.5px solid var(--line);background:transparent;color:var(--ink);cursor:pointer;transition:.15s}
+button:hover{border-color:var(--sub)}
+button.on{color:#fff;border-color:transparent;background:var(--vio)}
+button.wide{width:100%;margin-top:9px}
+label.row{display:flex;justify-content:space-between;font-size:13px;color:var(--sub);margin:14px 0 5px}
+label.row b{color:var(--ink);font-variant-numeric:tabular-nums;font-family:ui-monospace,Menlo,monospace}
+input[type=range]{width:100%;accent-color:var(--vio)}
+table{border-collapse:collapse;width:100%;font-size:13px;margin-top:4px}
+td{padding:5px 0;border-bottom:1px solid var(--line)}
+td:last-child{text-align:right;font-family:ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}
+td.lab{color:var(--sub)}
+.note{font-size:12.8px;color:var(--sub);line-height:1.55;margin-top:14px}
+.eq{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;background:color-mix(in srgb,var(--vio) 9%,transparent);
+ padding:2px 7px;border-radius:5px}
+.caveat{border-left:3px solid var(--red);background:color-mix(in srgb,var(--red) 8%,transparent);
+ padding:12px 14px;border-radius:9px;margin-top:22px;font-size:13.3px;line-height:1.6}
+</style></head><body><div class="wrap">
+
+<h1>Model A in 3D — a 3×3×3 block of even-prism cages</h1>
+<p class="sub">The unit is an <b>even prism with one hinge per edge</b>, the only family that survives a strict count. Every even prism has
+<b>three</b> independent antipodal corner axes, so the cages stack as a 3D block with six neighbours each. Press play and the whole
+block switches together; the welded corners stay welded the entire way.</p>
+
+<div class="layout">
+<div class="card stage"><div class="badge" id="badge"></div><svg id="view" viewBox="0 0 760 620" role="img"><title>3x3x3 block of even-prism cages</title></svg></div>
+
+<div>
+<div class="card" style="margin-bottom:16px">
+<h3>Cage</h3>
+<div class="btnrow">
+<button data-n="4">prism 4 (cube)</button>
+<button data-n="6">prism 6</button>
+<button data-n="8">prism 8</button>
+</div>
+<label class="row" style="margin-top:14px"><span>block size</span><b id="rn">3 × 3 × 3</b></label>
+<input type="range" id="sln" min="2" max="3" step="1" value="3">
+<label class="row" style="margin-top:12px"><span>design twist θ*</span><b id="rp">33.1°</b></label>
+<input type="range" id="slp" min="8" max="50" step="0.5" value="33.1">
+<label class="row" style="margin-top:12px"><span>sweep s</span><b id="rs">+1.00</b></label>
+<input type="range" id="sls" min="-1" max="1" step="0.005" value="1">
+<button class="wide" id="bplay">▶ Play the switch</button>
+<button class="wide" id="bsync">Synchronize monomers</button>
+<button class="wide" id="brand">Randomise the state</button>
+<button class="wide" id="breset">Reset to a valid state</button>
+</div>
+
+<div class="card">
+<h3>Result</h3>
+<table>
+<tr><td class="lab">cages / fusions</td><td id="oNL">–</td></tr>
+<tr><td class="lab">lattice angles</td><td id="oLat">–</td></tr>
+<tr><td class="lab">bond sign J</td><td id="oJ" style="color:var(--vio)">–</td></tr>
+<tr><td class="lab">ordering</td><td id="oOrd">–</td></tr>
+<tr><td class="lab"><b>fusions intact</b></td><td id="oBrk">–</td></tr>
+<tr><td class="lab">↳ max orientation mismatch</td><td id="oCl">–</td></tr>
+<tr><td class="lab">cage-internal arm misfit</td><td id="oCage">–</td></tr>
+<tr><td class="lab">cages forced by one</td><td id="oForced">–</td></tr>
+<tr><td class="lab"><b>global states</b></td><td id="oStates" style="color:var(--orng)">–</td></tr>
+</table>
+<div class="note" id="verdict" style="margin-top:12px"></div>
+</div>
+</div>
+</div>
+
+<div class="card" style="margin-top:22px">
+<h3>What the block shows</h3>
+<div class="note" style="font-size:13.5px;margin-top:0;max-width:none">
+<p style="margin-top:0">A bond translates the neighbour along a corner axis, so a 3D block needs three independent antipodal axes.
+Every even prism has them. Colouring sites by (i+j+k) parity 2-colours the bond graph, so every cycle is even and the block
+<b>can never be frustrated</b> whatever J turns out to be — measured: 27 cages, 54 bonds, one cage forces all 27, exactly two global
+states.</p>
+<p style="text-align:center"><span class="eq">prism 4 → J = +1, uniform, 109.47° ×3 &nbsp;·&nbsp; prism 6 → J = −1, checkerboard, 101.54° ×3 &nbsp;·&nbsp; prism 8 → J = +1, uniform, 82.66/82.66/138.12°</span></p>
+<p><b>The corners stay welded through the whole sweep.</b> Drag s away from ±1 and the fusion mismatch stays at 10⁻¹⁷ — the welded
+corners turn together from end to end, which is the propagation. What cannot follow is each cage's own closure: its arms are cut for
+θ*, so they open by up to 0.14 in between (shown as amber dashes). That is why only s = ±1 are real states, and why the switch is
+all-or-none rather than a continuous motion.</p>
+<p>Press <b>Randomise the state</b> to put cages out of step: roughly half the 54 fusions break and the mismatch jumps to 0.75.
+A cage cannot sit out of step with its neighbours.</p>
+</div>
+</div>
+
+<div class="caveat">
+<b>Scope.</b> Pure rigid-body geometry — no energies, forces, compliance, proteins or dynamics. Steric overlap between non-bonded
+cages is not checked. The mid-sweep frames are not physical states.
+</div>
+
+<script>
+(function(){
+"use strict";
+const DEG=Math.PI/180, $=id=>document.getElementById(id);
+const sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]];
+const add=(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]];
+const mul=(a,s)=>[a[0]*s,a[1]*s,a[2]*s];
+const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+const nrm=a=>Math.hypot(a[0],a[1],a[2]);
+const unit=a=>{const n=nrm(a);return n<1e-12?[0,0,0]:mul(a,1/n);};
+function rotM(ax,t){const a=unit(ax),c=Math.cos(t),s=Math.sin(t),C=1-c,[x,y,z]=a;
+ return[[c+x*x*C,x*y*C-z*s,x*z*C+y*s],[y*x*C+z*s,c+y*y*C,y*z*C-x*s],[z*x*C-y*s,z*y*C+x*s,c+z*z*C]];}
+const mv=(M,v)=>[dot(M[0],v),dot(M[1],v),dot(M[2],v)];
+const mm=(A,B)=>A.map(r=>[0,1,2].map(j=>r[0]*B[0][j]+r[1]*B[1][j]+r[2]*B[2][j]));
+const mT=A=>[0,1,2].map(i=>[0,1,2].map(j=>A[j][i]));
+const mdiff=(A,B)=>{let m=0;for(let i=0;i<3;i++)for(let j=0;j<3;j++)m=Math.max(m,Math.abs(A[i][j]-B[i][j]));return m;};
+
+function prism(n){
+ const r=1,h=2*r*Math.sin(Math.PI/n),V=[],E=[],sig=[];
+ for(const [lay,z] of [[0,-h/2],[1,h/2]])
+  for(let k=0;k<n;k++){V.push([r*Math.cos(2*Math.PI*k/n),r*Math.sin(2*Math.PI*k/n),z]);
+                       sig.push(Math.pow(-1,(k+lay)%2));}
+ const s=nrm(V[0]); for(let i=0;i<V.length;i++) V[i]=mul(V[i],1/s);
+ for(let lay=0;lay<2;lay++) for(let k=0;k<n;k++) E.push([lay*n+k,lay*n+(k+1)%n]);
+ for(let k=0;k<n;k++) E.push([k,n+k]);
+ return {n,name:'prism '+n,V,E,sig};
+}
+function kD(C){const [i,j]=C.E[0],d=sub(C.V[j],C.V[i]),D=nrm(d),u=mul(d,1/D);
+ return {k:dot(unit(C.V[i]),u)**2+dot(unit(C.V[j]),u)**2,D};}
+const lreq=(t,k,D)=>D/(k+(2-k)*Math.cos(t));
+function hinge(C,e,side,th,armL,mult){
+ const [i,j]=C.E[e], a=side?j:i, b=side?i:j;
+ const u=unit(sub(C.V[b],C.V[a]));
+ return add(C.V[a], mul(mv(rotM(unit(C.V[a]),C.sig[a]*mult*th),u), armL));
+}
+function antipode(C,a){for(let b=0;b<C.V.length;b++) if(nrm(add(C.V[b],C.V[a]))<1e-12) return b; return -1;}
+
+function build3D(C,M){
+ const ants=[]; for(let a=0;a<C.V.length;a++){const b=antipode(C,a); if(b>=0) ants.push([a,b]);}
+ let best=null;
+ for(let p=0;p<ants.length;p++)for(let q=p+1;q<ants.length;q++)for(let r=q+1;r<ants.length;r++){
+  const T=[p,q,r].map(i=>mul(C.V[ants[i][0]],2));
+  if(Math.abs(dot(cross(T[0],T[1]),T[2]))<1e-9) continue;
+  const off=Math.abs(dot(T[0],T[1]))+Math.abs(dot(T[0],T[2]))+Math.abs(dot(T[1],T[2]));
+  if(!best||off<best.off) best={off,ax:[ants[p],ants[q],ants[r]],T};
+ }
+ if(!best) return null;
+ const {ax,T}=best, sites=[], idx={}, bonds=[];
+ for(let i=0;i<M;i++)for(let j=0;j<M;j++)for(let k=0;k<M;k++){
+  const p=add(add(mul(T[0],i-(M-1)/2),mul(T[1],j-(M-1)/2)),mul(T[2],k-(M-1)/2));
+  idx[i+','+j+','+k]=sites.length; sites.push({c:p});
+ }
+ for(let i=0;i<M;i++)for(let j=0;j<M;j++)for(let k=0;k<M;k++){
+  const me=idx[i+','+j+','+k];
+  const nb=[[i+1,j,k,0],[i,j+1,k,1],[i,j,k+1,2]];
+  for(const [a,b,c,d] of nb){
+   const key=a+','+b+','+c;
+   if(a<M&&b<M&&c<M&&key in idx) bonds.push({x:me,y:idx[key],a:ax[d][0],b:ax[d][1],ax:d});
+  }
+ }
+ const angs=[];
+ for(const [p,q] of [[0,1],[0,2],[1,2]])
+  angs.push(Math.acos(Math.max(-1,Math.min(1,dot(T[p],T[q])/(nrm(T[p])*nrm(T[q])))))/DEG);
+ return {sites,bonds,ax,angs};
+}
+function cornerDelta(C,a,multNow,multDesign,th){
+ const n=unit(C.V[a]);
+ return mm(rotM(n,C.sig[a]*multNow*th), mT(rotM(n,C.sig[a]*multDesign*th)));
+}
+function bondJ(C,bd,th){
+ for(const J of [1,-1])
+  if(mdiff(cornerDelta(C,bd.a,-1,1,th), cornerDelta(C,bd.b,-J,J,th))<1e-10) return J;
+ return null;
+}
+
+let N=4, C=prism(4), M=3, thStar=33.1*DEG, armL=0, arr=null;
+let eps=[], eps0=[], Jarr=[], phase=1, playing=false, raf=null, dir=-1, syncForced=false, patternLocked=false;
+const violatesWelds=()=>arr&&arr.bonds.some((bd,i)=>eps[bd.y]!==Jarr[i]*eps[bd.x]);
+const syncLocked=()=>syncForced&&Jarr.some(J=>J<0);
+const isLocked=()=>syncLocked()||patternLocked;
+function rebuild(){
+ C=prism(N); const {k,D}=kD(C); armL=lreq(thStar,k,D);
+ arr=build3D(C,M); if(!arr){eps=[];return;}
+ Jarr=arr.bonds.map(bd=>bondJ(C,bd,thStar));
+ if(syncForced)setSynchronized();else resetState();
+}
+function resetState(){
+ const n=arr.sites.length, adj=arr.sites.map(()=>[]);
+ arr.bonds.forEach((bd,i)=>{adj[bd.x].push([bd.y,Jarr[i]]);adj[bd.y].push([bd.x,Jarr[i]]);});
+ eps=new Array(n).fill(0); eps[0]=1; const q=[0];
+ while(q.length){const v=q.shift(); for(const [w,J] of adj[v]) if(eps[w]===0){eps[w]=J*eps[v];q.push(w);}}
+ for(let i=0;i<n;i++) if(eps[i]===0) eps[i]=1;
+ eps0=eps.slice(); phase=1; patternLocked=false;
+}
+function setSynchronized(){eps=new Array(arr.sites.length).fill(1);eps0=eps.slice();phase=1;patternLocked=false;}
+
+let az=0.72, elev=0.5, drag=null;
+const svg=$('view'), NS='http://www.w3.org/2000/svg';
+const cvar=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function el(t,at){const e=document.createElementNS(NS,t);for(const k in at)e.setAttribute(k,at[k]);return e;}
+const View=()=>mm(rotM([1,0,0],-elev),rotM([0,0,1],az));
+
+function draw(){
+ while(svg.firstChild) svg.removeChild(svg.firstChild);
+ if(!arr) return;
+ const V3=View(), cA=cvar('--teal'),cB=cvar('--orng'),cAm=cvar('--ambr'),cS=cvar('--sub'),
+       cV=cvar('--vio'),cCard=cvar('--card');
+ let cageMis=0;
+ const cages=arr.sites.map((s,si)=>{
+  const segs=[], mult=eps[si]*phase;
+  for(let e=0;e<C.E.length;e++){
+   const [i,j]=C.E[e];
+   const Ma=hinge(C,e,0,thStar,armL,mult), Mb=hinge(C,e,1,thStar,armL,mult);
+   cageMis=Math.max(cageMis,nrm(sub(Ma,Mb)));
+   segs.push([add(s.c,C.V[i]),add(s.c,Ma)]);
+   segs.push([add(s.c,C.V[j]),add(s.c,Mb)]);
+   if(nrm(sub(Ma,Mb))>1e-9) segs.push([add(s.c,Ma),add(s.c,Mb),'gap']);
+  }
+  return segs;
+ });
+ const pts=[]; cages.forEach(sg=>sg.forEach(([a,b])=>pts.push(a,b)));
+ const pr=p=>{const q=mv(V3,p);return [q[0],-q[2],q[1]];};
+ let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+ for(const p of pts){const s=pr(p);x0=Math.min(x0,s[0]);x1=Math.max(x1,s[0]);y0=Math.min(y0,s[1]);y1=Math.max(y1,s[1]);}
+ const W=760,H=620,m=38;
+ const sc=Math.min((W-2*m)/Math.max(1e-6,x1-x0),(H-2*m)/Math.max(1e-6,y1-y0));
+ const ox=W/2-sc*(x0+x1)/2, oy=H/2-sc*(y0+y1)/2;
+ const Pj=p=>{const s=pr(p);return [ox+sc*s[0],oy+sc*s[1],s[2]];};
+ const items=[];
+ cages.forEach((sg,si)=>{
+  const col=eps[si]>0?cA:cB;
+  sg.forEach(([a,b,tag])=>{const pa=Pj(a),pb=Pj(b);
+   items.push({d:(pa[2]+pb[2])/2,f:()=>svg.appendChild(el('line',{x1:pa[0],y1:pa[1],x2:pb[0],y2:pb[1],
+    stroke:tag?cAm:col,'stroke-width':tag?2.2:1.6,'stroke-linecap':'round',
+    'stroke-dasharray':tag?'3 3':'none',opacity:(pa[2]+pb[2])/2<0?0.3:0.9}))});});
+ });
+ let broken=0,worst=0;
+ arr.bonds.forEach(bd=>{
+  const e=mdiff(cornerDelta(C,bd.a,eps[bd.x]*phase,eps0[bd.x],thStar),
+                cornerDelta(C,bd.b,eps[bd.y]*phase,eps0[bd.y],thStar));
+  worst=Math.max(worst,e); const bad=e>1e-10; if(bad) broken++;
+  const p=Pj(add(arr.sites[bd.x].c,C.V[bd.a]));
+  items.push({d:p[2]+40,f:()=>svg.appendChild(el('circle',{cx:p[0],cy:p[1],r:bad?4.5:3.2,
+   fill:bad?cAm:cV,stroke:cCard,'stroke-width':1}))});
+ });
+ items.sort((a,b)=>a.d-b.d).forEach(o=>o.f());
+ arr.sites.forEach((s,si)=>{const p=Pj(s.c);
+  const c=el('circle',{cx:p[0],cy:p[1],r:12,fill:'transparent',style:'cursor:pointer'});
+  c.addEventListener('click',ev=>{ev.stopPropagation();if(syncForced)return;stop();eps[si]=-eps[si];eps0=eps.slice();patternLocked=violatesWelds();phase=1;$('sls').value=1;stop();draw();});
+  svg.appendChild(c);});
+ const adj=arr.sites.map(()=>[]); arr.bonds.forEach(bd=>{adj[bd.x].push(bd.y);adj[bd.y].push(bd.x);});
+ const seen=new Set([0]),q=[0];
+ while(q.length){const v=q.shift();for(const w of adj[v]) if(!seen.has(w)){seen.add(w);q.push(w);}}
+ const n=arr.sites.length;
+ $('oNL').textContent=n+' / '+arr.bonds.length;
+ $('oLat').textContent=arr.angs.map(a=>a.toFixed(2)).join(' / ')+'°';
+ $('oJ').textContent=Jarr[0]>0?'all +1':'all −1';
+ $('oOrd').textContent=syncLocked()?'same sign · interlocked':(patternLocked?'random commands · interlocked':((new Set(eps0)).size===1?'uniform':'checkerboard'));
+ $('oBrk').textContent=(arr.bonds.length-broken)+' / '+arr.bonds.length;
+ $('oBrk').style.color=broken?cAm:cA;
+ $('oCl').textContent=worst.toExponential(2);
+ $('oCage').textContent=cageMis.toExponential(2);
+ $('oCage').style.color=cageMis>1e-9?cAm:cA;
+ $('oForced').textContent=seen.size+' / '+n;
+ $('oStates').textContent=isLocked()?'1 (locked)':'2';
+ $('rs').textContent=(phase>=0?'+':'')+phase.toFixed(2);
+ $('rp').textContent=(thStar/DEG).toFixed(1)+'°';
+ $('rn').textContent=M+' × '+M+' × '+M;
+ $('sls').disabled=isLocked();$('brand').disabled=syncForced;
+ const bd2=$('badge'), settled=Math.abs(Math.abs(phase)-1)<1e-6;
+ if(isLocked()){
+  $('verdict').innerHTML='<b style="color:'+cAm+'">INTERLOCKED · DOF = 0.</b> The commanded signs violate one or more rigid-weld constraints. Play applies a small elastic trial, then the array jams and returns.';
+ }else if(broken>0){
+  bd2.textContent=broken+' of '+arr.bonds.length+' fusions broken';
+  bd2.style.background='color-mix(in srgb,'+cAm+' 22%,transparent)';bd2.style.color=cAm;
+  $('verdict').innerHTML='<b style="color:'+cAm+'">Out of step.</b> '+broken+' fusions would have to shear by up to '+
+   worst.toFixed(3)+'. A cage cannot sit out of step with its neighbours.';
+ }else if(settled&&cageMis<1e-9){
+  bd2.textContent=(phase>0?'state 1':'state 0')+' — '+C.name+' block, '+n+' cages';
+  const col=phase>0?cB:cA;
+  bd2.style.background='color-mix(in srgb,'+col+' 18%,transparent)';bd2.style.color=col;
+  $('verdict').innerHTML='<b style="color:'+cA+'">Valid.</b> All '+arr.bonds.length+' fusions intact, every cage closed, '+
+   'one cage forces '+seen.size+' of '+n+'. Exactly two global states.';
+ }else{
+  bd2.textContent='mid-sweep — corners welded, cages open';
+  bd2.style.background='color-mix(in srgb,'+cV+' 18%,transparent)';bd2.style.color=cV;
+  $('verdict').innerHTML='<b style="color:'+cV+'">In transit.</b> Every fusion still intact ('+worst.toExponential(1)+
+   ') — the welded corners turn together through the whole block. Each cage’s own arms open by '+cageMis.toFixed(4)+
+   ' because they are cut for θ*.';
+ }
+}
+function stop(){playing=false;if(raf)cancelAnimationFrame(raf);raf=null;$('bplay').textContent=isLocked()?'▶ Attempt rotation (interlocked)':'▶ Play the switch';}
+function jamAttempt(){stop();playing=true;$('bplay').textContent='Interlocking…';let k=0;
+ (function step(){if(!playing)return;k=Math.min(1,k+.035);phase=1-.08*Math.sin(Math.PI*k);$('sls').value=phase;draw();
+  if(k<1)raf=requestAnimationFrame(step);else{playing=false;phase=1;$('sls').value=1;$('bplay').textContent='▶ Attempt rotation (interlocked)';draw();}})();}
+function tick(){if(!playing)return;
+ phase+=dir*0.012;
+ if(phase>=1){phase=1;dir=-1;}else if(phase<=-1){phase=-1;dir=1;}
+ $('sls').value=phase.toFixed(3);draw();raf=requestAnimationFrame(tick);}
+document.querySelectorAll('[data-n]').forEach(b=>b.onclick=()=>{
+ document.querySelectorAll('[data-n]').forEach(x=>x.classList.toggle('on',x===b));
+ N=+b.dataset.n; stop(); rebuild(); draw();});
+$('slp').oninput=e=>{thStar=(+e.target.value)*DEG; rebuild(); draw();};
+$('sln').oninput=e=>{M=+e.target.value; rebuild(); draw();};
+$('sls').oninput=e=>{stop(); phase=+e.target.value; draw();};
+$('bplay').onclick=function(){if(playing){stop();return;}
+ if(isLocked()){jamAttempt();return;}
+ playing=true;this.textContent='⏸ Stop';dir=phase>0?-1:1;raf=requestAnimationFrame(tick);};
+$('bsync').onclick=()=>{stop();syncForced=!syncForced;if(syncForced)setSynchronized();else resetState();$('sls').value=1;
+ const locked=syncLocked();$('sls').disabled=locked;$('brand').disabled=syncForced;
+ $('bsync').textContent=syncForced?'Restore natural ordering':'Synchronize monomers';stop();draw();};
+$('brand').onclick=()=>{stop(); for(let i=0;i<eps.length;i++) eps[i]=Math.random()<0.5?1:-1;
+ eps0=eps.slice();patternLocked=violatesWelds();phase=1;$('sls').value=1;stop();draw();};
+$('breset').onclick=()=>{stop(); if(syncForced)setSynchronized();else resetState(); $('sls').value=1; draw();};
+svg.addEventListener('pointerdown',e=>{drag=[e.clientX,e.clientY];svg.classList.add('drag');svg.setPointerCapture(e.pointerId);});
+svg.addEventListener('pointermove',e=>{if(!drag)return;
+ az+=(e.clientX-drag[0])*0.008; elev=Math.max(-1.5,Math.min(1.5,elev+(e.clientY-drag[1])*0.008));
+ drag=[e.clientX,e.clientY];draw();});
+svg.addEventListener('pointerup',()=>{drag=null;svg.classList.remove('drag');});
+svg.addEventListener('pointercancel',()=>{drag=null;svg.classList.remove('drag');});
+matchMedia('(prefers-color-scheme:dark)').addEventListener('change',draw);
+document.querySelector('[data-n="4"]').classList.add('on');
+rebuild(); draw();
+})();
+</script>
+</div></body></html>

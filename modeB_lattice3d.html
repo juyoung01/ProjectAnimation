@@ -1,0 +1,707 @@
+<title>Mode B 격자 역학 — 3D 팔면체 25개, 구속 300개</title>
+
+<style>
+  :root {
+    color-scheme: light dark;
+    --ground:#E3E9ED; --panel:#F4F7F9; --sunk:#D8E1E7; --rule:#C2CED6; --rule-2:#A9B8C2;
+    --ink:#0D161D; --muted:#5B6E7C; --faint:#8B9BA7;
+    --brass:#9E5F17; --steel:#166887; --strain:#AE3225; --signal:#75489A; --ok:#2C7A54;
+    --mono: ui-monospace,"SFMono-Regular","JetBrains Mono","IBM Plex Mono",Menlo,Consolas,monospace;
+    --sans: ui-sans-serif,system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground:#080B0F; --panel:#111820; --sunk:#0A0F14; --rule:#1F2C36; --rule-2:#31434E;
+      --ink:#DDE6EC; --muted:#7F94A2; --faint:#5A6B77;
+      --brass:#D68E3B; --steel:#54A9D0; --strain:#E05744; --signal:#C6A2EA; --ok:#4FBF89;
+    }
+  }
+  :root[data-theme="light"]{--ground:#E3E9ED;--panel:#F4F7F9;--sunk:#D8E1E7;--rule:#C2CED6;--rule-2:#A9B8C2;
+    --ink:#0D161D;--muted:#5B6E7C;--faint:#8B9BA7;--brass:#9E5F17;--steel:#166887;--strain:#AE3225;--signal:#75489A;--ok:#2C7A54;}
+  :root[data-theme="dark"]{--ground:#080B0F;--panel:#111820;--sunk:#0A0F14;--rule:#1F2C36;--rule-2:#31434E;
+    --ink:#DDE6EC;--muted:#7F94A2;--faint:#5A6B77;--brass:#D68E3B;--steel:#54A9D0;--strain:#E05744;--signal:#C6A2EA;--ok:#4FBF89;}
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1400px;margin:0 auto;padding:26px 18px 60px;display:flex;flex-direction:column;gap:24px}
+
+  .eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--faint)}
+  h1{font-family:var(--mono);font-size:clamp(20px,3vw,30px);font-weight:600;letter-spacing:-.015em;margin:0;text-wrap:balance}
+  .standfirst{margin:0;max-width:72ch;color:var(--muted);font-size:14.5px}
+  .masthead{display:flex;flex-direction:column;gap:11px}
+
+  .counts{display:flex;flex-wrap:wrap;gap:0;border:1px solid var(--rule);background:var(--panel);border-radius:2px;overflow:hidden}
+  .counts>div{flex:1 1 128px;padding:11px 16px;border-right:1px solid var(--rule);display:flex;flex-direction:column;gap:1px}
+  .counts>div:last-child{border-right:0}
+  .counts dt{font-family:var(--mono);font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--faint)}
+  .counts dd{margin:0;font-family:var(--mono);font-size:17px;font-variant-numeric:tabular-nums}
+  .counts .sub{font-size:11px;color:var(--muted)}
+
+  .rig{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+  @media (max-width:940px){.rig{grid-template-columns:minmax(0,1fr)}}
+
+  .stage{position:relative;background:var(--sunk);border:1px solid var(--rule);border-radius:2px;overflow:hidden}
+  .stage canvas{display:block;width:100%;height:auto;touch-action:none;cursor:grab}
+  .stage.dragging canvas{cursor:grabbing}
+  .stage.mode-pin canvas{cursor:cell}
+  .hud{position:absolute;left:0;right:0;bottom:0;display:flex;gap:18px;flex-wrap:wrap;padding:7px 12px;
+       background:color-mix(in srgb,var(--panel) 86%,transparent);border-top:1px solid var(--rule);
+       font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;color:var(--muted);backdrop-filter:blur(6px)}
+  .hud b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+  .hud b.bad{color:var(--strain)}
+  .hud b.good{color:var(--ok)}
+  .lock{position:absolute;top:12px;left:12px;padding:6px 11px;border:1px solid var(--strain);border-radius:2px;
+        background:color-mix(in srgb,var(--panel) 90%,transparent);color:var(--strain);
+        font-family:var(--mono);font-size:11px;letter-spacing:.05em;opacity:0;transition:opacity .25s}
+  .lock.on{opacity:1}
+
+  .rail{display:flex;flex-direction:column;gap:12px}
+  .card{background:var(--panel);border:1px solid var(--rule);border-radius:2px;padding:12px 16px 16px;display:flex;flex-direction:column;gap:12px}
+  .card>h2{font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);
+           margin:0;padding-bottom:8px;border-bottom:1px solid var(--rule);font-weight:600}
+  .seg{display:flex;border:1px solid var(--rule-2);border-radius:2px;overflow:hidden}
+  .seg button{flex:1;appearance:none;border:0;background:transparent;padding:8px 4px;cursor:pointer;
+              font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;color:var(--muted);border-right:1px solid var(--rule-2)}
+  .seg button:last-child{border-right:0}
+  .seg button[aria-pressed="true"]{background:var(--ink);color:var(--ground)}
+  .seg button:focus-visible{outline:2px solid var(--signal);outline-offset:-2px}
+  .field{display:flex;flex-direction:column;gap:4px}
+  .field label{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-family:var(--mono);
+               font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+  .field label b{color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:0}
+  input[type=range]{width:100%;accent-color:var(--steel);margin:0}
+  input[type=range]:focus-visible{outline:2px solid var(--signal);outline-offset:3px}
+  .hint{font-size:12px;color:var(--muted);margin:0}
+  .btnrow{display:flex;gap:7px}
+  .btn{flex:1;appearance:none;cursor:pointer;background:transparent;color:var(--ink);border:1px solid var(--rule-2);
+       border-radius:2px;padding:8px 4px;font-family:var(--mono);font-size:10.5px;letter-spacing:.05em}
+  .btn:hover{border-color:var(--ink)}
+  .btn:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+  .btn.primary{background:var(--ink);color:var(--ground);border-color:var(--ink)}
+  .readout{display:grid;grid-template-columns:1fr auto;gap:5px 12px;align-items:baseline}
+  .readout dt{font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+  .readout dd{margin:0;font-family:var(--mono);font-size:13px;font-variant-numeric:tabular-nums;text-align:right}
+  .readout dd.warn{color:var(--strain)}
+  .key{display:flex;flex-direction:column;gap:6px}
+  .key div{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted)}
+  .key span.sw{width:20px;height:4px;border-radius:2px;flex:none}
+  .key span.dot{width:9px;height:9px;border-radius:50%;flex:none}
+
+  .notes{border-top:1px solid var(--rule);padding-top:18px;display:grid;
+         grid-template-columns:repeat(auto-fit,minmax(258px,1fr));gap:18px}
+  .note h3{font-family:var(--mono);font-size:9.5px;letter-spacing:.15em;text-transform:uppercase;color:var(--faint);margin:0 0 8px;font-weight:600}
+  .note p{margin:0 0 8px;font-size:13px;color:var(--muted);max-width:60ch}
+  .note p:last-child{margin-bottom:0}
+  .note strong{color:var(--ink);font-weight:600}
+  .note code{font-family:var(--mono);font-size:12px;background:var(--sunk);border:1px solid var(--rule);padding:0 4px;border-radius:2px}
+  .flag{border-left:2px solid var(--strain);padding-left:11px}
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">Computase · Mode B · 구속 기반 강체 역학</div>
+    <h1>3D 팔면체 25개를 한 기구로 묶고, 실제로 밀어 본다</h1>
+    <p class="standfirst">
+      각 셀은 진짜 3차원 팔면체 케이지입니다. 이웃한 케이지는 <strong>꼭짓점 허브를 물리적으로 공유</strong>하고,
+      모서리마다 <strong>바 길이 = 51.53 Å</strong> 구속이 하나씩 걸립니다. 애니메이션을 미리 짜 두지 않았습니다 —
+      화면의 모든 움직임은 허브 110개에 대해 구속 300개를 매 프레임 푼 결과이고,
+      전환은 <strong>바 도킹이 실제로 떨어졌다 다시 붙어야만</strong> 일어납니다.
+    </p>
+  </header>
+
+  <dl class="counts">
+    <div><dt>자유도 (허브)</dt><dd>110</dd><div class="sub">각자 자기 축으로만 회전</div></div>
+    <div><dt>구속 (바)</dt><dd>300</dd><div class="sub">12 모서리 × 25 케이지</div></div>
+    <div><dt>과잉 구속</dt><dd>2.7×</dd><div class="sub">협동성의 근원</div></div>
+    <div><dt>θ* 트위스트</dt><dd>±31.347°</dd><div class="sub">허용되는 유일한 두 값</div></div>
+    <div><dt>중간 상태 결손</dt><dd>13.27 Å</dd><div class="sub">θ=0에서 바가 남는 길이</div></div>
+  </dl>
+
+  <div class="rig">
+    <div class="stage" id="stage">
+      <canvas id="cv" width="1240" height="880" role="img"
+              aria-label="5×5로 연결된 3차원 팔면체 케이지 격자의 역학 시뮬레이션. 드래그로 시점을 돌리고 셀을 클릭해 구동합니다."></canvas>
+      <div class="lock" id="lockmsg">도킹이 안 끊어지는 설정 → 기구가 잠깁니다. 어떤 구동도 통하지 않습니다.</div>
+      <div class="hud">
+        <span>반대 상태 <b id="ro-flip">0</b>/25</span>
+        <span>최대 길이 오차 <b id="ro-res">0.000</b> Å</span>
+        <span>도킹 최대 하중 <b id="ro-peak">0.000</b> Å</span>
+        <span>끊어진 도킹 <b id="ro-rms">0</b>/300</span>
+        <span>운동에너지 <b id="ro-ke">0.0</b></span>
+      </div>
+    </div>
+
+    <div class="rail">
+
+      <section class="card">
+        <h2>클릭했을 때</h2>
+        <div class="seg" role="group" aria-label="클릭 동작">
+          <button id="m-drive" aria-pressed="true">구동</button>
+          <button id="m-pin" aria-pressed="false">고정</button>
+        </div>
+        <p class="hint" id="modehint">셀을 누르면 그 케이지의 액추에이터 선호가 뒤집힙니다(빛 펄스). 나머지는 역학으로만 반응합니다.</p>
+        <div class="btnrow">
+          <button class="btn primary" id="b-all">전역 조명</button>
+          <button class="btn" id="b-block">3×3 블록</button>
+        </div>
+        <div class="btnrow">
+          <button class="btn" id="b-center">가운데 1개</button>
+          <button class="btn" id="b-reset">리셋</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>물성</h2>
+        <div class="field">
+          <label for="stiff">바 도킹 세기 <b id="v-stiff">1.20</b> Å</label>
+          <input type="range" id="stiff" min="0.15" max="13" step="0.05" value="1.20">
+        </div>
+        <p class="hint" id="stiffhint">
+          도킹(lobe2↔lobe2)이 이만큼 늘어나면 떨어집니다. 13 Å 이상으로 올리면 절대 안 떨어지고,
+          그러면 전환이 <em>아예 일어나지 않습니다</em> — θ = 0을 지나려면 바가 13.27 Å 줄어야 하니까요.
+        </p>
+        <div class="field">
+          <label for="drive">액추에이터 토크 <b id="v-drive">1.0</b>×</label>
+          <input type="range" id="drive" min="0.2" max="3" step="0.05" value="1">
+        </div>
+        <div class="field">
+          <label for="damp">감쇠 <b id="v-damp">0.10</b></label>
+          <input type="range" id="damp" min="0.02" max="0.6" step="0.01" value="0.10">
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>시점</h2>
+        <div class="btnrow">
+          <button class="btn" id="v-iso">비스듬히</button>
+          <button class="btn" id="v-top">위에서</button>
+          <button class="btn" id="v-side">옆에서</button>
+        </div>
+        <p class="hint">드래그로 회전, 휠로 줌. 케이지의 ±z 꼭짓점이 판 위아래로 튀어나온 게 보이면 제대로 보고 계신 겁니다.</p>
+        <div class="seg" role="group" aria-label="표시">
+          <button id="t-strain" aria-pressed="true">변형 강조</button>
+          <button id="t-hub" aria-pressed="true">허브</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>선택한 케이지</h2>
+        <dl class="readout">
+          <dt>좌표</dt><dd id="ro-cell">–</dd>
+          <dt>트위스트 θ</dt><dd id="ro-theta">–</dd>
+          <dt>내부 불균일</dt><dd id="ro-spread">–</dd>
+          <dt>최대 바 오차</dt><dd id="ro-cres">–</dd>
+        </dl>
+      </section>
+
+      <section class="card">
+        <h2>범례</h2>
+        <div class="key">
+          <div><span class="sw" style="background:var(--brass)"></span>θ &gt; 0 인 케이지</div>
+          <div><span class="sw" style="background:var(--steel)"></span>θ &lt; 0 인 케이지</div>
+          <div><span class="sw" style="background:var(--strain)"></span>도킹에 하중이 걸림 / 끊어져 벌어짐</div>
+          <div><span class="dot" style="background:var(--signal)"></span>구동 중인 케이지</div>
+          <div><span class="dot" style="border:2px solid var(--strain);background:transparent"></span>고정된 케이지</div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note">
+      <h3>기구를 어떻게 세웠나</h3>
+      <p>
+        허브 <strong>110개</strong>: 케이지마다 꼭짓점 6개인데, 판 안쪽 방향의 4개는 이웃과 <strong>같은 물체</strong>입니다.
+        허브는 자기 바깥 법선축으로만 돕니다 — 자유도 1개씩.
+      </p>
+      <p>
+        구속 <strong>300개</strong>: 모서리마다 <code>|H2 − H1| = q</code>.
+        <code>H = V + p·Rot(n, θ)·u</code>로 두 팔 끝을 잡고, 그 사이 거리가 바 길이여야 합니다.
+      </p>
+      <p>
+        푸는 방법은 XPBD(구속 투영) + 속도 적분. 해석적 기울기를 수치 미분과 대조해
+        <strong>1.5e-10</strong>까지 일치하는 것을 확인했습니다.
+      </p>
+    </div>
+    <div class="note">
+      <h3>실행하면 나오는 결과 — 세 가지</h3>
+      <p>
+        <strong>전역 조명 → 깨끗하게 넘어갑니다.</strong> 25/25 전환, 끊어진 도킹 0/300, 잔여 오차 0.000 Å,
+        모든 케이지가 정확히 ±31.3°로 재정착. 대가는 도킹이 순간적으로 받는 최대 하중
+        <strong>1.5~3.0 Å</strong> 입니다.
+      </p>
+      <p>
+        <strong>셀 하나만 조명 → 절대 안 넘어갑니다.</strong> 케이지의 꼭짓점 6개 중 4개가 이웃 소유라
+        혼자서는 돌 수 없습니다. 액추에이터 토크를 <strong>16배</strong>로 올려도 전환 0/25 —
+        대신 자기 도킹이 <strong>8~28개 찢어진 채</strong> ±9~10°에서 멈춥니다(잔여 8.1~13.3 Å).
+      </p>
+      <p>
+        <strong>3×3만 조명 → 경계가 망가집니다.</strong> 9개는 넘어가지만 도킹
+        <strong>92개가 끊어진 채</strong> 남습니다. 부분 기록의 비용이 경계면에 그대로 쌓입니다.
+      </p>
+    </div>
+    <div class="note">
+      <h3 style="color:var(--strain)">이 시뮬레이션이 말하지 않는 것</h3>
+      <p class="flag">
+        <strong>케이지 사이 결합은 아직 설계되지 않았습니다.</strong> 여기서는 꼭짓점 허브를 공유한다고
+        가정했습니다 — 실제 단백질에서 그 융합을 어떻게 만들지는 미해결입니다.
+      </p>
+      <p class="flag">
+        실제 파일에서는 꼭짓점 덩어리가 제자리 회전이 아니라 <strong>재도킹</strong>합니다(잔차 11.9~12.7 Å).
+        여기 쓰인 것은 BRIEF 3절의 <strong>이상화된 운동학</strong>입니다.
+      </p>
+      <p class="flag">
+        강체 + 길이 구속만 있습니다. 에너지 함수, 용매, 열요동, 접힘, 결합 친화도는 없습니다.
+        "도킹 세기"는 계면이 견디는 늘어남의 대역일 뿐 실제 결합 에너지가 아닙니다.
+      </p>
+      <p class="flag">
+        <strong>설계상의 함의</strong>: 셀을 개별적으로 쓸 수 없다면 셀룰러 오토마타가 성립하지 않습니다.
+        꼭짓점 공유가 협동성을 주는 바로 그 이유가, 국소 기록을 막는 이유이기도 합니다.
+        이 격자에서는 입력이 <em>전역</em>이거나, 아니면 경계에 손상을 남깁니다.
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  /* ═══════════════ 기하 상수 — modeB_tight 빌드에서 그대로 ═══════════════ */
+  const R = 79.60038772763436, P_ARM = 37.16, QBAR = 51.526671833749916;
+  const D = Math.SQRT2 * R, PITCH = 2 * R, THETA = 31.346890385646404, N = 5;
+  const GAP0 = 38.2519;                        // gap at theta = 0
+  const DEFICIT = QBAR - GAP0;                 // 13.2747 A
+  const d2r = Math.PI / 180;
+
+  const VLOC  = [[R,0,0],[-R,0,0],[0,R,0],[0,-R,0],[0,0,R],[0,0,-R]];
+  const NRM   = VLOC.map(v => v.map(c => c / R));
+  const EDGES = [[0,2],[0,3],[0,4],[0,5],[1,2],[1,3],[1,4],[1,5],[2,4],[2,5],[3,4],[3,5]];
+
+  const sub   = (a,b) => [a[0]-b[0], a[1]-b[1], a[2]-b[2]];
+  const dot   = (a,b) => a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+  const cross = (a,b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+  const len   = (a) => Math.hypot(a[0],a[1],a[2]);
+  function rotv(n, deg, v) {
+    const t = deg*d2r, c = Math.cos(t), s = Math.sin(t), k = cross(n,v), d = dot(n,v);
+    return [v[0]*c+k[0]*s+n[0]*d*(1-c), v[1]*c+k[1]*s+n[1]*d*(1-c), v[2]*c+k[2]*s+n[2]*d*(1-c)];
+  }
+
+  /* ═══════════════ 기구 조립 ═══════════════ */
+  const hubs = [], hubKey = new Map();
+  function hubAt(pos, nrm) {
+    const k = pos.map(v => Math.round(v*100)).join("/");
+    if (!hubKey.has(k)) { hubKey.set(k, hubs.length); hubs.push({ pos, axis: nrm.slice(), shared: 0 }); }
+    const h = hubKey.get(k);
+    hubs[h].shared++;
+    return { h, s: dot(hubs[h].axis, nrm) > 0 ? 1 : -1 };
+  }
+  const cages = [];
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    const C = [c*PITCH, r*PITCH, 0];
+    cages.push({ r, c, C, idx: cages.length,
+                 vs: VLOC.map((v,i) => hubAt([C[0]+v[0], C[1]+v[1], C[2]+v[2]], NRM[i])),
+                 pinned: false, driven: 0, sgn: ((r+c)%2===0)?1:-1, pref: ((r+c)%2===0)?1:-1 });
+  }
+  const cons = [];
+  for (const cg of cages) for (const [i,j] of EDGES) {
+    const u = sub(VLOC[j], VLOC[i]).map(v => v/D);
+    cons.push({ cg, i, j, u, un: u.map(v => -v), a: cg.vs[i], b: cg.vs[j], ni: NRM[i], nj: NRM[j], L: QBAR });
+  }
+  for (const cg of cages) cg.cons = cons.filter(cn => cn.cg === cg);
+  const NH = hubs.length, NC = cons.length;
+
+  const phi  = new Float64Array(NH);
+  const vel  = new Float64Array(NH);
+  const prev = new Float64Array(NH);
+  const fixed = new Uint8Array(NH);
+
+  function groundState() {
+    phi.fill(0); vel.fill(0);
+    for (const cg of cages) { cg.pref = cg.sgn; for (const v of cg.vs) phi[v.h] = v.s * cg.sgn * THETA; }
+  }
+
+  /* ── one constraint: ends, length, gradients ─────────────────────────── */
+  const _e = { H1:[0,0,0], H2:[0,0,0], ai:[0,0,0], aj:[0,0,0], L:0 };
+  function evalCon(cn) {
+    const ti = cn.a.s * phi[cn.a.h], tj = cn.b.s * phi[cn.b.h];
+    const ai = rotv(cn.ni, ti, cn.u), aj = rotv(cn.nj, tj, cn.un);
+    const Vi = VLOC[cn.i], Vj = VLOC[cn.j];
+    _e.H1 = [Vi[0]+P_ARM*ai[0], Vi[1]+P_ARM*ai[1], Vi[2]+P_ARM*ai[2]];
+    _e.H2 = [Vj[0]+P_ARM*aj[0], Vj[1]+P_ARM*aj[1], Vj[2]+P_ARM*aj[2]];
+    _e.ai = ai; _e.aj = aj;
+    _e.L = len(sub(_e.H2, _e.H1));
+    return _e;
+  }
+  function gradCon(cn) {
+    const e = evalCon(cn);
+    const d = sub(e.H2, e.H1), inv = 1 / Math.max(e.L, 1e-9);
+    const dHi = cross(cn.ni, e.ai), dHj = cross(cn.nj, e.aj);
+    const k = P_ARM * d2r;
+    return { L: e.L, C: e.L - QBAR,
+             gi: -dot(d, dHi) * k * inv * cn.a.s,
+             gj:  dot(d, dHj) * k * inv * cn.b.s };
+  }
+
+  /* ═══════════════ 동역학 (XPBD + 끊어지는 도킹) ═══════════════
+     팔(hub→H1)은 공유결합이라 절대 안 끊어집니다. 바 도킹(lobe2↔lobe2)은
+     비공유 계면이므로 하중이 세지면 떨어지고, 길이가 다시 맞으면 재결합합니다.
+     이것이 없으면 두 상태 사이를 넘어갈 방법이 아예 없습니다 —
+     θ = 0 에서 바가 13.27 Å 남기 때문입니다.                            */
+  const DT = 1/120, ITERS = 8;
+  const ALPHA_T = 80.0;         // intact dock softness (XPBD compliance / dt^2)
+  const CAPTURE = 0.80;         // re-docks when the length error falls back under this (A)
+  let breakA = 1.2, driveGain = 1.0, damping = 0.10;
+  let peakLoad = 0, lastKE = 0, nBroken = 0;
+
+  for (const cn of cons) { cn.active = 1; cn.C = 0; }
+
+  function step(dt) {
+    // ACTUATOR.  Each hinge is bistable: the azobenzene isomer sets which of the two
+    // conformers it prefers, i.e. which sign of theta it pulls its hubs toward.  Clicking a
+    // cage flips that preference (the light pulse).  Everything else is mechanics.
+    for (const cg of cages) {
+      if (cg.pinned) continue;
+      if (cg.driven > 0) cg.driven -= dt;
+      const target = cg.pref * THETA;
+      for (const v of cg.vs) {
+        if (fixed[v.h]) continue;
+        vel[v.h] += v.s * (target - v.s * phi[v.h]) * 34 * driveGain * dt;
+      }
+    }
+
+    for (let i = 0; i < NH; i++) { prev[i] = phi[i]; if (!fixed[i]) phi[i] += vel[i]*dt; }
+
+    for (let it = 0; it < ITERS; it++) {
+      for (let ci = 0; ci < NC; ci++) {
+        const cn = cons[ci];
+        if (!cn.active || cn.cg.pinned) continue;
+        const g = gradCon(cn);
+        cn.L = g.L;
+        const fa = fixed[cn.a.h] ? 0 : 1, fb = fixed[cn.b.h] ? 0 : 1;
+        const den = fa*g.gi*g.gi + fb*g.gj*g.gj + ALPHA_T;
+        if (den < 1e-12) continue;
+        const lam = -g.C / den;
+        if (fa) phi[cn.a.h] += lam * g.gi;
+        if (fb) phi[cn.b.h] += lam * g.gj;
+      }
+    }
+
+    // break / re-dock — judged on the residual stretch left after the solve
+    let broken = 0, worstLoad = 0;
+    for (let ci = 0; ci < NC; ci++) {
+      const cn = cons[ci];
+      const C = evalCon(cn).L - QBAR;
+      cn.C = C;
+      const mag = Math.abs(C);
+      if (cn.active) {
+        if (mag > worstLoad) worstLoad = mag;
+        if (mag > breakA) cn.active = 0;
+      } else if (mag < CAPTURE) {
+        cn.active = 1;
+      }
+      if (!cn.active) broken++;
+    }
+    nBroken = broken;
+    peakLoad = Math.max(peakLoad, worstLoad);
+
+    let ke = 0;
+    const dmp = Math.max(0, 1 - damping * dt * 60);
+    for (let i = 0; i < NH; i++) {
+      if (fixed[i]) { vel[i] = 0; continue; }
+      vel[i] = ((phi[i]-prev[i]) / dt) * dmp;
+      if (!Number.isFinite(vel[i]) || Math.abs(vel[i]) > 1e5) vel[i] = 0;
+      if (!Number.isFinite(phi[i])) phi[i] = prev[i];
+      ke += vel[i]*vel[i];
+    }
+    lastKE = ke / NH;
+  }
+
+  /* ═══════════════ 측정 ═══════════════ */
+  function measure() {
+    let worst = 0, ss = 0, flipped = 0;
+    for (const cn of cons) {
+      cn.L = evalCon(cn).L;
+      const e = Math.abs(cn.L - QBAR);
+      if (e > worst) worst = e;
+      ss += e*e;
+    }
+    for (const cg of cages) {
+      const t = cageTheta(cg);
+      if (Math.sign(t) !== cg.sgn && Math.abs(t) > THETA*0.5) flipped++;
+    }
+    return { worst, rms: Math.sqrt(ss/NC), flipped };
+  }
+  const cageTheta = (cg) => {
+    let s = 0; for (const v of cg.vs) s += v.s * phi[v.h];
+    return s / 6;
+  };
+  const cageSpread = (cg) => {
+    let mn = Infinity, mx = -Infinity;
+    for (const v of cg.vs) { const t = v.s*phi[v.h]; mn = Math.min(mn,t); mx = Math.max(mx,t); }
+    return mx - mn;
+  };
+  function cageWorstRes(cg) {
+    let w = 0;
+    for (const cn of cg.cons) w = Math.max(w, Math.abs(evalCon(cn).L - QBAR));
+    return w;
+  }
+
+  /* ═══════════════ 3D 카메라 & 렌더 ═══════════════ */
+  const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+  const TARGET = [(N-1)*PITCH/2, (N-1)*PITCH/2, 0];
+  const cam = { az: -0.62, el: 0.60, dist: 1750, focal: 1150 };
+  let showStrain = true, showHubs = true;
+
+  function basis() {
+    const ce = Math.cos(cam.el), se = Math.sin(cam.el), ca = Math.cos(cam.az), sa = Math.sin(cam.az);
+    const dir = [ce*ca, ce*sa, se];
+    const eye = [TARGET[0]+dir[0]*cam.dist, TARGET[1]+dir[1]*cam.dist, TARGET[2]+dir[2]*cam.dist];
+    const fwd = dir.map(v => -v);
+    let right = cross(fwd, [0,0,1]); const rl = len(right);
+    right = rl < 1e-6 ? [1,0,0] : right.map(v => v/rl);
+    const up = cross(right, fwd);
+    return { eye, fwd, right, up };
+  }
+  let B = basis();
+  function project(w) {
+    const d = sub(w, B.eye);
+    const z = dot(d, B.fwd);
+    if (z < 12) return null;
+    const f = cam.focal / z;
+    return { x: cv.width/2 + dot(d, B.right)*f, y: cv.height/2 - dot(d, B.up)*f, z, f };
+  }
+
+  const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  let COL = {};
+  const readColors = () => { COL = { brass:css("--brass"), steel:css("--steel"), strain:css("--strain"),
+    signal:css("--signal"), ink:css("--ink"), faint:css("--faint"), rule:css("--rule"),
+    sunk:css("--sunk"), muted:css("--muted") }; };
+  readColors();
+  function rgbOf(s) {
+    if (!s) return [128,128,128];
+    if (s[0] === "#") { let h = s.slice(1); if (h.length===3) h = h.split("").map(c=>c+c).join("");
+      return [0,2,4].map(i => parseInt(h.slice(i,i+2),16)); }
+    const m = s.match(/-?\d+(\.\d+)?/g);
+    return m ? [ +m[0]|0, +m[1]|0, +m[2]|0 ] : [128,128,128];
+  }
+  const mix = (a,b,t) => { const A=rgbOf(a), Bc=rgbOf(b);
+    return "rgb("+A.map((v,i)=>Math.round(v+(Bc[i]-v)*t)).join(",")+")"; };
+
+  const items = [];
+  function pushSeg(w1, w2, col, width) {
+    const a = project(w1), b = project(w2);
+    if (!a || !b) return;
+    items.push({ t:0, z:(a.z+b.z)/2, x1:a.x, y1:a.y, x2:b.x, y2:b.y, col, w:width*(a.f+b.f)/2 });
+  }
+  function pushDot(w, col, rad) {
+    const a = project(w);
+    if (!a) return;
+    items.push({ t:1, z:a.z, x:a.x, y:a.y, col, r:Math.max(1.2, rad*a.f) });
+  }
+
+  function build() {
+    items.length = 0;
+    for (const cg of cages) {
+      const th = cageTheta(cg);
+      const base = th >= 0 ? COL.brass : COL.steel;
+      const dim = cg.pinned ? 0.45 : 1;
+      for (const cn of cg.cons) {
+        const e = evalCon(cn);
+        const w1 = [cg.C[0]+VLOC[cn.i][0], cg.C[1]+VLOC[cn.i][1], cg.C[2]+VLOC[cn.i][2]];
+        const w2 = [cg.C[0]+e.H1[0], cg.C[1]+e.H1[1], cg.C[2]+e.H1[2]];
+        const w3 = [cg.C[0]+e.H2[0], cg.C[1]+e.H2[1], cg.C[2]+e.H2[2]];
+        const w4 = [cg.C[0]+VLOC[cn.j][0], cg.C[1]+VLOC[cn.j][1], cg.C[2]+VLOC[cn.j][2]];
+        const armCol = dim < 1 ? mix(base, COL.sunk, 0.55) : base;
+        pushSeg(w1, w2, armCol, 3.1);
+        pushSeg(w3, w4, armCol, 3.1);
+        const err = Math.abs(e.L - QBAR);
+        if (!cn.active) {
+          // released contact: draw the two halves stubbed, with a gap
+          const m1 = [w2[0]+(w3[0]-w2[0])*0.34, w2[1]+(w3[1]-w2[1])*0.34, w2[2]+(w3[2]-w2[2])*0.34];
+          const m2 = [w2[0]+(w3[0]-w2[0])*0.66, w2[1]+(w3[1]-w2[1])*0.66, w2[2]+(w3[2]-w2[2])*0.66];
+          pushSeg(w2, m1, COL.strain, 4.6);
+          pushSeg(m2, w3, COL.strain, 4.6);
+        } else {
+          const t = showStrain ? Math.min(1, err / DEFICIT) : 0;
+          pushSeg(w2, w3, t > 0.02 ? mix(base, COL.strain, Math.min(1, t*1.8)) : armCol, 4.6);
+        }
+      }
+      if (cg.driven > 0) {
+        const rr = R*1.16;
+        for (let k = 0; k < 24; k++) {
+          const a0 = k/24*Math.PI*2, a1 = (k+0.55)/24*Math.PI*2;
+          pushSeg([cg.C[0]+Math.cos(a0)*rr, cg.C[1]+Math.sin(a0)*rr, 0],
+                  [cg.C[0]+Math.cos(a1)*rr, cg.C[1]+Math.sin(a1)*rr, 0], COL.signal, 2.0);
+        }
+      }
+      if (cg.pinned) {
+        const rr = R*1.16;
+        for (let k = 0; k < 4; k++) {
+          const a0 = k/4*Math.PI*2 + 0.4, a1 = a0 + 0.7;
+          pushSeg([cg.C[0]+Math.cos(a0)*rr, cg.C[1]+Math.sin(a0)*rr, 0],
+                  [cg.C[0]+Math.cos(a1)*rr, cg.C[1]+Math.sin(a1)*rr, 0], COL.strain, 2.6);
+        }
+      }
+    }
+    if (showHubs) for (const h of hubs) pushDot(h.pos, h.shared > 1 ? COL.ink : COL.faint, h.shared > 1 ? 5.2 : 3.4);
+    items.sort((a,b) => b.z - a.z);
+  }
+
+  function draw() {
+    B = basis();
+    build();
+    ctx.clearRect(0,0,cv.width,cv.height);
+    // ground plane grid, drawn first (it is behind or through the sheet)
+    ctx.strokeStyle = COL.rule; ctx.globalAlpha = 0.5; ctx.lineWidth = 1;
+    for (let k = 0; k <= N; k++) {
+      const t = (k - 0.5) * PITCH;
+      const a1 = project([t, -0.5*PITCH, 0]), a2 = project([t, (N-0.5)*PITCH, 0]);
+      const b1 = project([-0.5*PITCH, t, 0]), b2 = project([(N-0.5)*PITCH, t, 0]);
+      if (a1&&a2){ctx.beginPath();ctx.moveTo(a1.x,a1.y);ctx.lineTo(a2.x,a2.y);ctx.stroke();}
+      if (b1&&b2){ctx.beginPath();ctx.moveTo(b1.x,b1.y);ctx.lineTo(b2.x,b2.y);ctx.stroke();}
+    }
+    ctx.globalAlpha = 1;
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+    const zmin = cam.dist - 700, zspan = 1400;
+    for (const it of items) {
+      const fog = Math.min(0.62, Math.max(0, (it.z - zmin)/zspan)) * 0.72;
+      if (it.t === 0) {
+        ctx.strokeStyle = fog > 0.02 ? mix2(it.col, COL.sunk, fog) : it.col;
+        ctx.lineWidth = Math.max(0.6, it.w);
+        ctx.beginPath(); ctx.moveTo(it.x1,it.y1); ctx.lineTo(it.x2,it.y2); ctx.stroke();
+      } else {
+        ctx.fillStyle = fog > 0.02 ? mix2(it.col, COL.sunk, fog) : it.col;
+        ctx.beginPath(); ctx.arc(it.x, it.y, it.r, 0, 7); ctx.fill();
+      }
+    }
+  }
+  function mix2(a, b, t) { return a.startsWith("rgb") ? a : mix(a, b, t); }
+
+  /* ═══════════════ readouts ═══════════════ */
+  const $ = (id) => document.getElementById(id);
+  let selected = null;
+  function sync() {
+    const m = measure();
+    $("ro-flip").textContent = m.flipped;
+    $("ro-res").textContent  = m.worst.toFixed(3);
+    $("ro-peak").textContent = peakLoad.toFixed(3);
+    $("ro-rms").textContent  = String(nBroken);
+    $("ro-ke").textContent   = lastKE.toFixed(1);
+    $("ro-res").className = m.worst > 0.05 ? "bad" : "good";
+    $("lockmsg").classList.toggle("on", breakA > 11.5 && cages.some(c => c.driven > 0 || Math.abs(c.driven) > 0));
+    if (selected) {
+      $("ro-cell").textContent   = `행 ${selected.r+1} · 열 ${selected.c+1}`;
+      const t = cageTheta(selected);
+      $("ro-theta").textContent  = (t>=0?"+":"") + t.toFixed(2) + "°";
+      $("ro-spread").textContent = cageSpread(selected).toFixed(2) + "°";
+      const w = cageWorstRes(selected);
+      $("ro-cres").textContent   = w.toFixed(3) + " Å";
+      $("ro-cres").className     = w > 0.05 ? "warn" : "";
+    } else {
+      for (const id of ["ro-cell","ro-theta","ro-spread","ro-cres"]) $(id).textContent = "–";
+    }
+  }
+
+  /* ═══════════════ loop ═══════════════ */
+  let acc = 0, last = 0;
+  function frame(now) {
+    if (!last) last = now;
+    acc += Math.min(0.1, (now - last)/1000); last = now;
+    let n = 0;
+    while (acc >= DT && n < 8) { step(DT); acc -= DT; n++; }
+    draw(); sync();
+    requestAnimationFrame(frame);
+  }
+
+  /* ═══════════════ input ═══════════════ */
+  let mode = "drive", dragging = false, moved = 0, px = 0, py = 0;
+  const stage = document.getElementById("stage");
+
+  function pickCage(ev) {
+    const rect = cv.getBoundingClientRect();
+    const x = (ev.clientX-rect.left)*(cv.width/rect.width), y = (ev.clientY-rect.top)*(cv.height/rect.height);
+    let best = null, bd = 1e9;
+    for (const cg of cages) {
+      const q = project(cg.C); if (!q) continue;
+      const d = Math.hypot(q.x-x, q.y-y);
+      if (d < bd) { bd = d; best = cg; }
+    }
+    const scale = cam.focal / cam.dist * PITCH * 0.55;
+    return bd < scale ? best : null;
+  }
+  cv.addEventListener("pointerdown", (ev) => {
+    dragging = true; moved = 0; px = ev.clientX; py = ev.clientY;
+    stage.classList.add("dragging"); cv.setPointerCapture?.(ev.pointerId);
+  });
+  cv.addEventListener("pointermove", (ev) => {
+    if (!dragging) return;
+    const dx = ev.clientX-px, dy = ev.clientY-py; px = ev.clientX; py = ev.clientY;
+    moved += Math.abs(dx)+Math.abs(dy);
+    cam.az -= dx*0.006;
+    cam.el = Math.max(-1.45, Math.min(1.45, cam.el + dy*0.006));
+  });
+  cv.addEventListener("pointerup", (ev) => {
+    dragging = false; stage.classList.remove("dragging");
+    if (moved > 6) return;
+    const cg = pickCage(ev);
+    if (!cg) return;
+    selected = cg;
+    if (mode === "pin" || ev.shiftKey) { cg.pinned = !cg.pinned; for (const v of cg.vs) fixed[v.h] = cg.pinned ? 1 : 0; }
+    else { peakLoad = 0; cg.pref = -cg.pref; cg.driven = 0.9; }
+  });
+  cv.addEventListener("wheel", (ev) => {
+    ev.preventDefault();
+    cam.dist = Math.max(520, Math.min(4200, cam.dist * (1 + Math.sign(ev.deltaY)*0.09)));
+  }, { passive: false });
+
+  function setMode(m) {
+    mode = m;
+    $("m-drive").setAttribute("aria-pressed", String(m==="drive"));
+    $("m-pin").setAttribute("aria-pressed", String(m==="pin"));
+    $("modehint").textContent = m === "drive"
+      ? "셀을 누르면 그 케이지의 액추에이터 선호가 뒤집힙니다(빛 펄스). 나머지는 역학으로만 반응합니다."
+      : "셀을 눌러 허브를 고정/해제합니다. 고정된 케이지는 격자를 붙잡습니다.";
+    stage.classList.toggle("mode-pin", m==="pin");
+  }
+  $("m-drive").addEventListener("click", () => setMode("drive"));
+  $("m-pin").addEventListener("click", () => setMode("pin"));
+    function illuminate(pred) {
+    peakLoad = 0;
+    for (const cg of cages) if (!cg.pinned && pred(cg)) { cg.pref = -cg.pref; cg.driven = 0.9; }
+  }
+  $("b-all").addEventListener("click",    () => { selected = null; illuminate(() => true); });
+  $("b-block").addEventListener("click",  () => { selected = null; illuminate(cg => cg.r>=1 && cg.r<=3 && cg.c>=1 && cg.c<=3); });
+  $("b-center").addEventListener("click", () => { selected = cages[2*N+2]; illuminate(cg => cg === cages[2*N+2]); });
+  $("b-reset").addEventListener("click", () => {
+    groundState(); peakLoad = 0; selected = null;
+    for (const cg of cages) { cg.pinned = false; cg.driven = 0; }
+    for (const cn of cons) { cn.active = 1; cn.C = 0; }
+    nBroken = 0; fixed.fill(0);
+  });
+  $("stiff").addEventListener("input", (e) => { breakA = +e.target.value; $("v-stiff").textContent = breakA.toFixed(2); });
+  $("drive").addEventListener("input", (e) => { driveGain = +e.target.value; $("v-drive").textContent = driveGain.toFixed(1); });
+  $("damp").addEventListener("input",  (e) => { damping = +e.target.value; $("v-damp").textContent = damping.toFixed(2); });
+  $("v-iso").addEventListener("click",  () => { cam.az=-0.62; cam.el=0.60; cam.dist=1750; });
+  $("v-top").addEventListener("click",  () => { cam.az=-Math.PI/2; cam.el=1.40; cam.dist=1550; });
+  $("v-side").addEventListener("click", () => { cam.az=-Math.PI/2; cam.el=0.06; cam.dist=1750; });
+  $("t-strain").addEventListener("click", (e) => { showStrain = !showStrain; e.currentTarget.setAttribute("aria-pressed", String(showStrain)); });
+  $("t-hub").addEventListener("click",    (e) => { showHubs   = !showHubs;   e.currentTarget.setAttribute("aria-pressed", String(showHubs)); });
+
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", readColors);
+  new MutationObserver(readColors).observe(document.documentElement, { attributes:true, attributeFilter:["data-theme"] });
+
+  /* ═══════════════ go ═══════════════ */
+  groundState();
+  requestAnimationFrame(frame);
+  setTimeout(() => { peakLoad = 0; for (const cg of cages) { cg.pref = -cg.pref; cg.driven = 0.9; } }, 1200);
+
+  // expose for the headless regression test
+  globalThis.__MODEB__ = { hubs, cages, cons, phi, vel, fixed, step, measure, cageTheta, cageSpread,
+    groundState, set breakA(v){breakA=v;}, get breakA(){return breakA;}, get nBroken(){return nBroken;}, get peakLoad(){return peakLoad;},
+    set driveGain(v){driveGain=v;}, set damping(v){damping=v;},
+    drive(cg, t){ cg.pref = -cg.pref; cg.driven = t; }, get cons(){ return cons; }, THETA, QBAR, DEFICIT, NH, NC };
+})();
+</script>

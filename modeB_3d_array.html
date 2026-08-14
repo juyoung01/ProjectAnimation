@@ -1,0 +1,68 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mode B 3D array — shared-hub rotation</title>
+<style>
+:root{--bg:#f5f2eb;--card:#fff;--ink:#18212b;--sub:#67717c;--a:#0d9488;--b:#f0642b;--bar:#7564e8;--hub:#2563a8;--bad:#e3a72f;--rule:#d7d3ca}
+@media(prefers-color-scheme:dark){:root{--bg:#111418;--card:#1a1e23;--ink:#edf0f3;--sub:#aeb5be;--rule:#333941}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 ui-sans-serif,system-ui,sans-serif}.wrap{max-width:1240px;margin:auto;padding:28px 22px 48px}h1{font-size:25px;margin:0 0 5px}.sub{color:var(--sub);margin:0 0 18px}.layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px}.card{background:var(--card);border:1px solid var(--rule);border-radius:13px;padding:15px;box-shadow:0 8px 25px #0000000b}.stage{position:relative;padding:0;overflow:hidden}canvas{width:100%;height:690px;display:block;cursor:grab}.badge{display:none}.row{display:flex;justify-content:space-between;margin:11px 0 5px}.row b{font-variant-numeric:tabular-nums}input[type=range]{width:100%}button{width:100%;margin-top:10px;padding:10px;border:1px solid var(--rule);border-radius:9px;background:transparent;color:var(--ink);font-weight:700;cursor:pointer}table{width:100%;border-collapse:collapse;margin-top:5px}td{padding:7px 0;border-bottom:1px solid var(--rule)}td:last-child{text-align:right;font-family:ui-monospace,monospace}.lab{color:var(--sub)}.note{margin-top:15px;color:var(--sub)}.eq{font-family:ui-monospace,monospace;color:var(--bar)}@media(max-width:850px){.layout{grid-template-columns:1fr}canvas{height:560px}}
+</style></head><body><div class="wrap">
+<h1>Mode B — 3D shared-hub array</h1>
+<p class="sub">Octahedra are arrayed along x, y and z. Every fused corner is one rigid hub, and all incident arms use the same spatial rotation matrix.</p>
+<div class="layout"><div class="card stage"><div class="badge" id="badge"></div><canvas id="cv"></canvas></div>
+<div><div class="card"><h3>Drive</h3>
+<label class="row"><span>rotation angle θ*</span><b id="rth"></b></label><input id="sth" type="range" min="5" max="55" step=".05" value="31.3469">
+<label class="row"><span>arm length λ=p/D</span><b id="rlam"></b></label><input id="slam" type="range" min=".15" max=".48" step=".0005" value=".3301">
+<label class="row"><span>array size</span><b id="rn"></b></label><input id="sn" type="range" min="2" max="4" step="1" value="3">
+<label class="row"><span>sweep s</span><b id="rs"></b></label><input id="ss" type="range" min="-1" max="1" step=".005" value="1">
+<button id="play">▶ Play the collective rotation</button><button id="sync">Synchronize monomers (interlock)</button><button id="reset">Reset</button></div>
+<div class="card" style="margin-top:16px"><h3>Geometry</h3><table>
+<tr><td class="lab">cages</td><td id="oc"></td></tr><tr><td class="lab">shared fusions</td><td id="of"></td></tr>
+<tr><td class="lab">unique hubs</td><td id="oh"></td></tr><tr><td class="lab">orientation mismatch</td><td id="om"></td></tr>
+<tr><td class="lab">connector length</td><td>free</td></tr><tr><td class="lab">ordering</td><td id="oo">3D checkerboard</td></tr>
+</table><div class="note" id="status"><span class="eq">R(−n,−θ)=R(n,θ)</span><br>Blue ticks show shared-hub orientation. Drag to rotate and use the wheel to zoom.</div></div></div></div></div>
+<script>(()=>{'use strict';
+const $=x=>document.getElementById(x),cv=$('cv'),ctx=cv.getContext('2d'),PI=Math.PI;
+const add=(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]],sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]],mul=(a,s)=>a.map(x=>x*s);
+const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2],cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+const norm=a=>Math.hypot(...a),unit=a=>mul(a,1/(norm(a)||1));
+function rot(n,t,v){n=unit(n);const c=Math.cos(t),s=Math.sin(t);return add(add(mul(v,c),mul(cross(n,v),s)),mul(n,dot(n,v)*(1-c)))}
+const R=1,D=Math.SQRT2,V=[[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]],E=[[0,2],[0,3],[0,4],[0,5],[1,2],[1,3],[1,4],[1,5],[2,4],[2,5],[3,4],[3,5]];
+let M=3,theta=31.3469*PI/180,lam=.3301,phase=1,cages=[],hubs=[],hubMap=new Map(),fusions=0,playing=false,dir=-1,raf=0,syncLocked=false;
+const key=p=>p.map(x=>Math.round(x*1e7)).join('/');
+function rebuild(){cages=[];hubs=[];hubMap=new Map();fusions=0;
+ for(let x=0;x<M;x++)for(let y=0;y<M;y++)for(let z=0;z<M;z++){
+  const C=[2*(x-(M-1)/2),2*(y-(M-1)/2),2*(z-(M-1)/2)],eps=syncLocked?1:(((x+y+z)&1)?-1:1),vs=[];
+  for(let a=0;a<6;a++){const p=add(C,V[a]),k=key(p);let h=hubMap.get(k);
+   if(h===undefined){h=hubs.length;hubMap.set(k,h);hubs.push({p,axis:V[a],owners:[]});}else fusions++;
+   const sign=dot(hubs[h].axis,V[a])>0?1:-1;hubs[h].owners.push({ci:cages.length,a,sign});vs.push({h,sign});}
+  cages.push({C,eps,vs});
+ }}
+function hubAngle(h){const o=h.owners[0],cg=cages[o.ci];return o.sign*cg.eps*phase*theta}
+function hubDelta(h){const o=h.owners[0],cg=cages[o.ci],now=o.sign*cg.eps*phase*theta,base=o.sign*cg.eps*theta;return v=>rot(h.axis,now-base,v)}
+function edge(cg,i,j){const u=unit(sub(V[j],V[i])),p=lam*D,hi=hubs[cg.vs[i].h],hj=hubs[cg.vs[j].h];
+ const ai0=rot(V[i],cg.eps*theta,u),aj0=rot(V[j],cg.eps*theta,mul(u,-1));
+ const di=syncLocked?(v=>rot(V[i],cg.eps*(phase-1)*theta,v)):hubDelta(hi);
+ const dj=syncLocked?(v=>rot(V[j],cg.eps*(phase-1)*theta,v)):hubDelta(hj);
+ return {A:hi.p,H1:add(hi.p,di(mul(ai0,p))),H2:add(hj.p,dj(mul(aj0,p))),B:hj.p};}
+let az=.72,el=.52,zoom=1,drag=null;
+function basis(){const ce=Math.cos(el),se=Math.sin(el),ca=Math.cos(az),sa=Math.sin(az),f=unit([-ce*ca,-ce*sa,-se]),r=unit(cross(f,[0,0,1])),u=cross(r,f);return{f,r,u}}
+function resize(){const d=devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;if(cv.width!==w*d||cv.height!==h*d){cv.width=w*d;cv.height=h*d;ctx.setTransform(d,0,0,d,0,0)}}
+function draw(){resize();const W=cv.clientWidth,H=cv.clientHeight,B=basis(),scale=Math.min(W,H)*.105*zoom,items=[];
+ const pr=p=>({x:W/2+dot(p,B.r)*scale,y:H/2-dot(p,B.u)*scale,z:dot(p,B.f)}),seg=(a,b,col,w)=>{a=pr(a);b=pr(b);items.push({z:(a.z+b.z)/2,f:()=>{ctx.strokeStyle=col;ctx.lineWidth=w;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke()}})};
+ const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim(),ca=css('--a'),cb=css('--b'),bar=css('--bar'),hc=css('--hub');
+ for(const cg of cages){const col=cg.eps>0?ca:cb;for(const [i,j] of E){const e=edge(cg,i,j);seg(e.A,e.H1,col,2);seg(e.H1,e.H2,bar,2.5);seg(e.H2,e.B,col,2)}}
+ for(const h of hubs)if(h.owners.length>1){let ref=Math.abs(h.axis[2])<.9?[0,0,1]:[1,0,0];ref=unit(sub(ref,mul(h.axis,dot(ref,h.axis))));ref=rot(h.axis,hubAngle(h),ref);seg(add(h.p,mul(ref,-.16)),add(h.p,mul(ref,.16)),hc,3.5)}
+ ctx.clearRect(0,0,W,H);items.sort((a,b)=>b.z-a.z).forEach(x=>x.f());
+ let worst=0;for(const h of hubs)if(h.owners.length>1){const a0=hubAngle(h);for(const o of h.owners){const cg=cages[o.ci],a=o.sign*cg.eps*phase*theta;worst=Math.max(worst,Math.abs(Math.atan2(Math.sin(a-a0),Math.cos(a-a0))))}}
+ $('rth').textContent=(theta*180/PI).toFixed(2)+'°';$('rlam').textContent=lam.toFixed(4);$('rn').textContent=M+' × '+M+' × '+M;$('rs').textContent=(phase>=0?'+':'')+phase.toFixed(2);$('oc').textContent=cages.length;$('of').textContent=fusions;$('oh').textContent=hubs.length;
+ $('om').textContent=syncLocked?'locked (2Δθ)':worst.toExponential(2);$('oo').textContent=syncLocked?'same local sign · interlocked':'3D checkerboard';
+ $('status').innerHTML=syncLocked?'<b style="color:var(--bad)">INTERLOCKED · DOF = 0</b><br>Rigid welds demand equal spatial rotation, but equal local signs demand opposite rotations. Any motion requires relative weld twist 2Δθ.':'<span class="eq">R(−n,−θ)=R(n,θ)</span><br>Blue ticks show the shared rigid-hub orientation.';}
+function stop(){playing=false;cancelAnimationFrame(raf);$('play').textContent=syncLocked?'▶ Attempt rotation (interlocked)':'▶ Play the collective rotation'}function tick(){if(!playing)return;phase+=dir*.009;if(phase<=-1){phase=-1;dir=1}else if(phase>=1){phase=1;dir=-1}$('ss').value=phase;draw();raf=requestAnimationFrame(tick)}
+function jamAttempt(){stop();playing=true;$('play').textContent='Interlocking…';let k=0;(function step(){if(!playing)return;k=Math.min(1,k+.035);phase=1-.08*Math.sin(Math.PI*k);$('ss').value=phase;draw();if(k<1)raf=requestAnimationFrame(step);else{playing=false;phase=1;$('ss').value=1;$('play').textContent='▶ Attempt rotation (interlocked)';draw()}})()}
+$('play').onclick=()=>{if(syncLocked)return jamAttempt();if(playing)return stop();playing=true;dir=phase>0?-1:1;$('play').textContent='⏸ Stop';tick()};
+$('sync').onclick=()=>{stop();syncLocked=!syncLocked;phase=1;$('ss').value=1;$('ss').disabled=syncLocked;rebuild();$('sync').textContent=syncLocked?'Restore checkerboard rotation':'Synchronize monomers (interlock)';stop();draw()};
+$('reset').onclick=()=>{stop();phase=1;$('ss').value=1;draw()};
+$('sth').oninput=e=>{theta=+e.target.value*PI/180;draw()};$('slam').oninput=e=>{lam=+e.target.value;draw()};$('sn').oninput=e=>{M=+e.target.value;rebuild();draw()};$('ss').oninput=e=>{stop();phase=+e.target.value;draw()};
+cv.onpointerdown=e=>{drag=[e.clientX,e.clientY];cv.setPointerCapture(e.pointerId)};cv.onpointermove=e=>{if(!drag)return;az-=(e.clientX-drag[0])*.008;el=Math.max(-1.45,Math.min(1.45,el+(e.clientY-drag[1])*.008));drag=[e.clientX,e.clientY];draw()};cv.onpointerup=()=>drag=null;cv.onwheel=e=>{e.preventDefault();zoom=Math.max(.45,Math.min(2.5,zoom*Math.exp(-e.deltaY*.001)));draw()};
+addEventListener('resize',draw);matchMedia('(prefers-color-scheme:dark)').addEventListener('change',draw);rebuild();draw();
+})();</script></body></html>

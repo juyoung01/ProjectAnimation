@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mode A on the cube — one hinge per edge</title>
+<style>
+:root{--paper:#FCFCFA;--ink:#1A1A1A;--sub:#5C6068;--card:#FFF;--line:#E3E3DF;
+ --teal:#1B7F72;--orng:#E2662F;--navy:#3D5A80;--ambr:#E9B44C;--grey:#8A8F98;--vio:#6C5CE7;--red:#C0392B}
+@media(prefers-color-scheme:dark){:root{--paper:#14161A;--ink:#E8E8E6;--sub:#9AA0A8;--card:#1B1E23;--line:#2C3037}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+ font:15px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:32px 20px 60px}
+.wrap{max-width:1180px;margin:0 auto}
+h1{font-size:23px;font-weight:650;letter-spacing:-.02em;margin:0 0 4px}
+.sub{color:var(--sub);font-size:14.5px;margin:0 0 24px;max-width:82ch}
+.layout{display:grid;grid-template-columns:1fr 340px;gap:22px;align-items:start}
+@media(max-width:900px){.layout{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:18px 20px}
+.stage{padding:8px;position:relative}
+#view{width:100%;height:auto;display:block;cursor:grab;touch-action:none}
+#view.drag{cursor:grabbing}
+.badge{position:absolute;top:16px;left:18px;font-size:12.5px;font-weight:650;letter-spacing:.03em;
+ padding:5px 12px;border-radius:20px}
+h3{font-size:12.5px;font-weight:650;text-transform:uppercase;letter-spacing:.05em;color:var(--sub);margin:0 0 12px}
+.btnrow{display:flex;gap:8px;margin-bottom:16px}
+button{flex:1;font:inherit;font-size:13.5px;font-weight:600;padding:10px 6px;border-radius:9px;
+ border:1.5px solid var(--line);background:transparent;color:var(--ink);cursor:pointer;transition:.15s}
+button:hover{border-color:var(--sub)}
+button.on{color:#fff;border-color:transparent}
+button.s0.on{background:var(--teal)} button.s1.on{background:var(--orng)}
+button.wide{flex:none;width:100%;margin-bottom:10px}
+label.row{display:flex;justify-content:space-between;font-size:13px;color:var(--sub);margin:14px 0 5px}
+label.row b{color:var(--ink);font-variant-numeric:tabular-nums;font-family:ui-monospace,Menlo,monospace}
+input[type=range]{width:100%;accent-color:var(--vio)}
+.chk{display:flex;align-items:center;gap:8px;font-size:13px;margin:7px 0;cursor:pointer}
+.chk input{accent-color:var(--navy)}
+table{border-collapse:collapse;width:100%;font-size:13px;margin-top:4px}
+td{padding:5px 0;border-bottom:1px solid var(--line)}
+td:last-child{text-align:right;font-family:ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}
+td.lab{color:var(--sub)}
+.warnbox{margin-top:14px;font-size:12.8px;line-height:1.5;padding:10px 12px;border-radius:9px;
+ border-left:3px solid var(--ambr);background:color-mix(in srgb,var(--ambr) 12%,transparent);display:none}
+.warnbox.show{display:block}
+.note{font-size:12.8px;color:var(--sub);line-height:1.55;margin-top:14px}
+.eq{font-family:ui-monospace,Menlo,monospace;font-size:13px;background:color-mix(in srgb,var(--vio) 9%,transparent);
+ padding:2px 7px;border-radius:5px;white-space:nowrap}
+.caveat{border-left:3px solid var(--red);background:color-mix(in srgb,var(--red) 8%,transparent);
+ padding:12px 14px;border-radius:9px;margin-top:22px;font-size:13.3px;line-height:1.6}
+.preset{display:inline-block;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;
+ padding:2px 7px;margin:3px 2px 0 0;border-radius:6px;cursor:pointer;
+ border:1px solid var(--line);color:var(--ink);background:transparent;transition:.15s}
+.preset:hover{border-color:var(--vio);color:var(--vio)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+@media(max-width:760px){.grid2{grid-template-columns:1fr}}
+</style></head><body><div class="wrap">
+
+<h1>Mode A on the cube — one hinge per edge, animated</h1>
+<p class="sub">Eight vertices pinned in space. Each edge is one arm rigidly fused to its hub, a single hinge, and a second arm into
+the neighbouring hub — <b>half the hinges of Mode B</b>. The only freedom is that every hub turns in place, and because the cube graph is
+bipartite the two colours turn in <b>opposite senses</b>. Drag to look around; sweep θ by hand to see why the untwisted cube cannot be assembled.</p>
+
+<div class="layout">
+<div class="card stage"><div class="badge" id="badge"></div><svg id="view" viewBox="0 0 760 620" role="img"><title>Cubic cage with one hinge per edge, animated</title></svg></div>
+
+<div>
+<div class="card" style="margin-bottom:16px">
+<h3>Drive</h3>
+<div class="btnrow">
+<button class="s0" id="b0">450 nm · state 0</button>
+<button class="s1" id="b1">365 nm · state 1</button>
+</div>
+<button class="wide" id="bcyc">Cycle ⟳</button>
+<label class="row"><span>design twist θ* &nbsp;<span style="opacity:.6">(you set this)</span></span><b id="rp">20.0°</b></label>
+<input type="range" id="slp" min="3" max="55" step="0.1" value="20">
+<div class="note" style="margin-top:8px">Set the hub twist you want out of the cage. The arm length ℓ and the hinge swing you would
+need are then <b>derived</b> from it in closed form — nothing is fitted. Snap presets:
+<span class="preset" data-t="20">20°</span> <span class="preset" data-t="19.54">cs221 · swing 63.7°</span>
+<span class="preset" data-t="33.10">Y-λ · swing 107.6°</span></div>
+<label class="row" style="margin-top:16px"><span>hub twist θ &nbsp;<span style="opacity:.6">(manual sweep)</span></span><b id="rt">+20.0°</b></label>
+<input type="range" id="sl" min="-60" max="60" step="0.1" value="20">
+<div class="note" style="margin-top:10px">Sweep θ away from ±θ* and the two half-edges stop meeting. That gap is the whole two-state argument.</div>
+</div>
+
+<div class="card" style="margin-bottom:16px">
+<h3>Show</h3>
+<label class="chk"><input type="checkbox" id="cRef" checked> undistorted cube</label>
+<label class="chk"><input type="checkbox" id="cTick" checked> hub fiducial ticks</label>
+<label class="chk"><input type="checkbox" id="cSpin" checked> rotation sense arrows</label>
+<label class="chk"><input type="checkbox" id="cHinge" checked> hinges</label>
+<label class="chk"><input type="checkbox" id="cPlot" checked> arm-length curve</label>
+</div>
+
+<div class="card">
+<h3>Readout</h3>
+<table>
+<tr><td class="lab">hub position drift</td><td id="oPos" style="color:var(--teal)">0.000</td></tr>
+<tr><td class="lab">hub axis tilt</td><td id="oAx" style="color:var(--teal)">0.00°</td></tr>
+<tr><td class="lab">hub twist (even / odd)</td><td id="oTw" style="color:var(--vio)">+20.0° / −20.0°</td></tr>
+<tr><td class="lab"><b>design twist θ*</b> &nbsp;<span style="opacity:.55">input</span></td><td id="oStar" style="color:var(--vio)">± 20.00°</td></tr>
+<tr><td class="lab">↳ arm length ℓ &nbsp;<span style="opacity:.55">derived</span></td><td id="oL">1.0419</td></tr>
+<tr><td class="lab">↳ arm excess &nbsp;<span style="opacity:.55">derived</span></td><td id="oExc">4.19 %</td></tr>
+<tr><td class="lab">↳ hinge elbow &nbsp;<span style="opacity:.55">derived</span></td><td id="oBend">32.60°</td></tr>
+<tr><td class="lab">↳ <b>hinge swing needed</b> &nbsp;<span style="opacity:.55">derived</span></td><td id="oSw" style="color:var(--orng)">65.21°</td></tr>
+<tr><td class="lab">arm length required at θ</td><td id="oReq">1.0419</td></tr>
+<tr><td class="lab">misfit</td><td id="oMis">0.0000</td></tr>
+<tr><td class="lab">hinge radius</td><td id="oMid">1.4194</td></tr>
+<tr><td class="lab">…vs rest 1.4142</td><td id="oMidD">+0.367 %</td></tr>
+</table>
+<div class="warnbox" id="warn"><b>The arms do not meet.</b> Each pair of half-edges is built at a fixed length ℓ, so at this twist their
+ends miss each other by the misfit above — they would have to interpenetrate (θ small) or fall short. This is every θ except ±θ*,
+and it is why only two states exist.</div>
+</div>
+</div>
+</div>
+
+<div class="card" style="margin-top:22px">
+<h3>What the animation is showing</h3>
+<div class="grid2" style="margin-top:0">
+<div class="note" style="font-size:13.5px;margin-top:0">
+<p style="margin-top:0">Every hub turns about its own outward body-diagonal axis and does nothing else — the eight vertex coordinates and the
+eight axis directions never change. That is the whole point: the fusion sites stay exactly where a lattice needs them, and the
+in-place rotation is the output signal.</p>
+<p>Put every hub at twist <b>σθ</b>, where <b>σ = s₁s₂s₃</b> is the product of the vertex's coordinate signs — the bipartite
+2-colouring of the cube. Then for every edge the two arm ends agree in two of their three components <i>identically</i>, for
+every θ. Only the component along the edge is left, and it gives one scalar equation.</p>
+</div>
+<div class="note" style="font-size:13.5px;margin-top:0">
+<p style="margin-top:0">That equation solves in closed form:</p>
+<p style="text-align:center"><span class="eq">ℓ_req(θ) = 3 / (2 cos θ + 1)</span></p>
+<p>ℓ_req is <b>exactly even</b> in θ and <b>strictly increasing</b> in |θ|. So an arm cut to one length fits at exactly two twists,
+<b>+θ* and −θ*</b>, and at nothing in between — the two states are mirror images, and the untwisted cube is not a high-energy
+intermediate but geometrically unassemblable. Inverting gives the design point directly:</p>
+<p style="text-align:center"><span class="eq">cos θ* = ½ (3/ℓ − 1)</span></p>
+</div>
+</div>
+<div class="note" style="font-size:13.5px;max-width:none">
+<b>Why the cube and not the octahedron.</b> One hinge per edge forces adjacent hubs to turn in opposite senses, which requires the
+vertex graph to be 2-colourable. The octahedron's graph is K<sub>2,2,2</sub> — it carries 8 triangular faces, so no 2-colouring exists
+and Mode A is impossible there for any buckling direction. The cube's graph has no odd cycle, so the obstruction simply is not present.
+Solving the rigid-hub conditions numerically agrees: the octahedron never gets below a residual of 0.21, the cube reaches 2·10⁻¹⁶.
+</div>
+</div>
+
+<div class="caveat">
+<b>What this animation is and is not.</b> This is the <i>idealised rigid-link kinematics</i>, exactly as
+<code>modeB_animation.html</code> is for Mode B — hubs are rigid bodies, arms are rigid, the hinge is an ideal revolute joint.
+It shows that the cube admits the Mode B behaviour with one hinge per edge, that the states are discrete (0 internal DOF), and
+that the shape change is small. It does <b>not</b> establish a protein design: the hinge's real screw axis and its +2.142 Å
+translation have not been checked against the required joint, no parts have been placed, and nothing here is energy-minimised,
+sequence-designed or folding-validated. Treat the numbers as a target to build toward, not as a result.
+</div>
+
+<script>
+(function(){
+"use strict";
+const S3=Math.sqrt(3), DEG=Math.PI/180;
+
+/* ---------- cube ---------- */
+const Vs=[]; for(const a of[-1,1])for(const b of[-1,1])for(const c of[-1,1]) Vs.push([a,b,c]);
+const sig=v=>v[0]*v[1]*v[2];
+const Es=[];
+for(let i=0;i<8;i++)for(let j=i+1;j<8;j++){
+ let d=0,k=-1; for(let t=0;t<3;t++) if(Vs[i][t]!==Vs[j][t]){d++;k=t;}
+ if(d===1) Es.push({i,j,k});
+}
+
+/* ---------- vector helpers ---------- */
+const sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]];
+const add=(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]];
+const mul=(a,s)=>[a[0]*s,a[1]*s,a[2]*s];
+const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];
+const nrm=a=>Math.hypot(a[0],a[1],a[2]);
+const unit=a=>{const n=nrm(a);return n<1e-12?[0,0,0]:mul(a,1/n);};
+function rotM(ax,t){const a=unit(ax),c=Math.cos(t),s=Math.sin(t),C=1-c,[x,y,z]=a;
+ return[[c+x*x*C,x*y*C-z*s,x*z*C+y*s],[y*x*C+z*s,c+y*y*C,y*z*C-x*s],[z*x*C-y*s,z*y*C+x*s,c+z*z*C]];}
+const mv=(M,v)=>[dot(M[0],v),dot(M[1],v),dot(M[2],v)];
+const mm=(A,B)=>A.map(r=>[0,1,2].map(j=>r[0]*B[0][j]+r[1]*B[1][j]+r[2]*B[2][j]));
+
+/* ---------- view ---------- */
+let az=0.62, elev=0.36; const S=132, CX=300, CY=300;
+const View=()=>mm(rotM([1,0,0],-elev),rotM([0,0,1],az));
+const prj=(P,V)=>{const q=mv(V,P);return[CX+S*q[0],CY-S*q[2],q[1]];};
+
+/* ---------- kinematics (closed form derived in cube_closedform.py) ---------- */
+const lreq=th=>3/(2*Math.cos(th)+1);
+function thetaStar(l){const c=(3/l-1)/2; return (c>=-1&&c<=1)?Math.acos(c):null;}
+function geom(th,l){
+ return Es.map(e=>{
+  const A=Vs[e.i],B=Vs[e.j];
+  const nA=unit(A),nB=unit(B);
+  const uA=[0,0,0]; uA[e.k]=-A[e.k];
+  const uB=[0,0,0]; uB[e.k]=-B[e.k];
+  const Ma=add(A,mul(mv(rotM(nA,sig(A)*th),uA),l));
+  const Mb=add(B,mul(mv(rotM(nB,sig(B)*th),uB),l));
+  return{...e,A,B,Ma,Mb,mid:mul(add(Ma,Mb),0.5),misfit:nrm(sub(Mb,Ma))};
+ });
+}
+/* elbow, only meaningful when the arms meet */
+const elbow=l=>180-Math.acos(Math.max(-1,Math.min(1,1-2/(l*l))))/DEG;
+
+/* ---------- state ---------- */
+let thStar=20*DEG;                 /* user-set design twist -- the INPUT */
+let armL=lreq(thStar);             /* derived: arm length that assembles at +/- thStar */
+let theta=thStar, anim=null, cyc=null;
+
+/* ---------- svg ---------- */
+const svg=document.getElementById('view'), NS='http://www.w3.org/2000/svg';
+const cvar=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function el(t,at){const e=document.createElementNS(NS,t);for(const k in at)e.setAttribute(k,at[k]);return e;}
+const $=id=>document.getElementById(id);
+
+function draw(){
+ while(svg.firstChild) svg.removeChild(svg.firstChild);
+ const V=View(), g=geom(theta,armL);
+ const st = theta>=0?1:0;
+ const cA=cvar('--teal'), cB=cvar('--orng'), cL=cvar('--line'), cS=cvar('--sub'),
+       cI=cvar('--ink'), cV=cvar('--vio'), cAm=cvar('--ambr'), cG=cvar('--grey');
+ const ts=thetaStar(armL);
+ const fits = ts!==null && Math.abs(Math.abs(theta)-ts)<1e-4;
+
+ /* reference cube */
+ if($('cRef').checked){
+  for(const e of Es){
+   const p=prj(Vs[e.i],V), q=prj(Vs[e.j],V);
+   svg.appendChild(el('line',{x1:p[0],y1:p[1],x2:q[0],y2:q[1],stroke:cL,'stroke-width':1.2,'stroke-dasharray':'3 4'}));
+  }
+ }
+
+ /* collect drawables with depth */
+ const items=[];
+ for(const e of g){
+  const pA=prj(e.A,V), pB=prj(e.B,V), pMa=prj(e.Ma,V), pMb=prj(e.Mb,V);
+  const col=cV;
+  items.push({d:(pA[2]+pMa[2])/2,f:()=>{
+   svg.appendChild(el('line',{x1:pA[0],y1:pA[1],x2:pMa[0],y2:pMa[1],stroke:col,
+     'stroke-width':4.2,'stroke-linecap':'round',opacity:(pA[2]+pMa[2])/2<-0.15?0.3:0.95}));
+  }});
+  items.push({d:(pB[2]+pMb[2])/2,f:()=>{
+   svg.appendChild(el('line',{x1:pB[0],y1:pB[1],x2:pMb[0],y2:pMb[1],stroke:col,
+     'stroke-width':4.2,'stroke-linecap':'round',opacity:(pB[2]+pMb[2])/2<-0.15?0.3:0.95}));
+  }});
+  /* misfit: show the two arm ends and the gap between them */
+  if($('cHinge').checked){
+   if(fits){
+    items.push({d:pMa[2],f:()=>{
+     svg.appendChild(el('circle',{cx:pMa[0],cy:pMa[1],r:5.4,fill:cvar('--card'),stroke:cI,'stroke-width':2}));
+    }});
+   }else{
+    items.push({d:pMa[2],f:()=>{
+     svg.appendChild(el('line',{x1:pMa[0],y1:pMa[1],x2:pMb[0],y2:pMb[1],stroke:cAm,'stroke-width':2.4,'stroke-dasharray':'2 3'}));
+     for(const p of [pMa,pMb])
+      svg.appendChild(el('circle',{cx:p[0],cy:p[1],r:4,fill:cAm,opacity:.9}));
+    }});
+   }
+  }
+ }
+ /* hubs */
+ for(let i=0;i<8;i++){
+  const P=Vs[i], p=prj(P,V), s=sig(P), col=s>0?cA:cB;
+  items.push({d:p[2],f:()=>{
+   const back=p[2]<-0.15, op=back?0.35:1;
+   svg.appendChild(el('circle',{cx:p[0],cy:p[1],r:13,fill:col,opacity:op}));
+   if($('cTick').checked){
+    const n=unit(P);
+    let ref=Math.abs(n[2])<0.9?[0,0,1]:[1,0,0];
+    const t0=unit(cross(n,ref)), t=mv(rotM(n,s*theta),t0);
+    const q=prj(add(P,mul(t,0.42)),V);
+    svg.appendChild(el('line',{x1:p[0],y1:p[1],x2:q[0],y2:q[1],stroke:cvar('--card'),
+      'stroke-width':3,'stroke-linecap':'round',opacity:op}));
+   }
+   if($('cSpin').checked && Math.abs(theta)>0.02){
+    /* small arc showing the sense of rotation, drawn in the tangent plane */
+    const n=unit(P);
+    let ref=Math.abs(n[2])<0.9?[0,0,1]:[1,0,0];
+    const t0=unit(cross(n,ref)), b0=cross(n,t0), R=0.30;
+    const seg=[]; const sweep=s*theta;
+    for(let k=0;k<=14;k++){
+     const a=sweep*k/14;
+     const pt=add(P,add(mul(t0,R*Math.cos(a)),mul(b0,R*Math.sin(a))));
+     const pp=prj(add(pt,mul(n,0.26)),V); seg.push(`${k?'L':'M'} ${pp[0]} ${pp[1]}`);
+    }
+    svg.appendChild(el('path',{d:seg.join(' '),fill:'none',stroke:col,'stroke-width':2.6,
+      'stroke-linecap':'round',opacity:op*0.95,'marker-end':'url(#ah'+(s>0?'A':'B')+')'}));
+   }
+  }});
+ }
+ /* arrowheads */
+ const defs=el('defs',{});
+ for(const [id,col] of [['ahA',cA],['ahB',cB]]){
+  const m=el('marker',{id,viewBox:'0 0 10 10',refX:'8',refY:'5',markerWidth:'5',markerHeight:'5',orient:'auto-start-reverse'});
+  m.appendChild(el('path',{d:'M 0 0 L 10 5 L 0 10 z',fill:col}));
+  defs.appendChild(m);
+ }
+ svg.appendChild(defs);
+
+ items.sort((a,b)=>a.d-b.d).forEach(o=>o.f());
+
+ /* legend */
+ const lg=[[cA,'σ = +1  (turns +θ)'],[cB,'σ = −1  (turns −θ)']];
+ lg.forEach((r,i)=>{
+  svg.appendChild(el('circle',{cx:596,cy:34+i*22,r:7,fill:r[0]}));
+  const t=el('text',{x:610,y:34+i*22+4.5,fill:cS,'font-size':'12.5','font-family':'ui-sans-serif,system-ui'});
+  t.textContent=r[1]; svg.appendChild(t);
+ });
+
+ /* arm-length curve */
+ if($('cPlot').checked){
+  const x0=520,y0=590,w=210,h=170, tmin=-60,tmax=60;
+  let lmin=1, lmax=Math.max(1.34, armL*1.06);
+  const X=d=>x0+w*(d-tmin)/(tmax-tmin), Y=v=>y0-h*(v-lmin)/(lmax-lmin);
+  svg.appendChild(el('rect',{x:x0,y:y0-h,width:w,height:h,fill:'none',stroke:cL,'stroke-width':1}));
+  let d='';
+  for(let k=0;k<=180;k++){const dg=tmin+(tmax-tmin)*k/180, v=lreq(dg*DEG);
+   d+=(k?' L ':'M ')+X(dg)+' '+Math.max(y0-h,Y(v));}
+  svg.appendChild(el('path',{d,fill:'none',stroke:cV,'stroke-width':2}));
+  svg.appendChild(el('line',{x1:x0,y1:Y(armL),x2:x0+w,y2:Y(armL),stroke:cvar('--navy'),
+    'stroke-width':1.6,'stroke-dasharray':'5 4'}));
+  if(ts!==null){
+   for(const s of[-1,1]){
+    const xx=X(s*ts/DEG);
+    svg.appendChild(el('circle',{cx:xx,cy:Y(armL),r:4,fill:cvar('--navy')}));
+    svg.appendChild(el('line',{x1:xx,y1:Y(armL),x2:xx,y2:y0,stroke:cvar('--navy'),'stroke-width':.9,opacity:.45}));
+   }
+  }
+  svg.appendChild(el('circle',{cx:X(theta/DEG),cy:Y(lreq(theta)),r:4.5,
+    fill:fits?cvar('--navy'):cAm,stroke:cvar('--card'),'stroke-width':1.5}));
+  const lab=(x,y,s,col)=>{const t=el('text',{x,y,fill:col||cS,'font-size':'11.5',
+    'font-family':'ui-sans-serif,system-ui'});t.textContent=s;svg.appendChild(t);};
+  lab(x0,y0-h-8,'arm length required  ℓ_req(θ) = 3/(2cos θ + 1)',cS);
+  lab(x0-2,y0+14,'−60°'); lab(x0+w/2-10,y0+14,'0'); lab(x0+w-18,y0+14,'+60°');
+  lab(x0+w+4,Y(armL)+4,'ℓ built',cvar('--navy'));
+ }
+
+ /* readouts */
+ const dg=theta/DEG, req=lreq(theta), mis=g[0].misfit;
+ $('rt').textContent=(dg>=0?'+':'')+dg.toFixed(2)+'°';
+ $('rp').textContent=(thStar/DEG).toFixed(1)+'°';
+ $('oStar').textContent='± '+(thStar/DEG).toFixed(2)+'°';
+ $('oPos').textContent='0.000';
+ $('oAx').textContent='0.00°';
+ $('oTw').textContent=(dg>=0?'+':'')+dg.toFixed(1)+'° / '+(dg>=0?'−':'+')+Math.abs(dg).toFixed(1)+'°';
+ $('oReq').textContent=req.toFixed(4);
+ $('oL').textContent=armL.toFixed(4);
+ $('oMis').textContent=mis.toFixed(4);
+ $('oMis').style.color = mis>1e-4?cAm:cA;
+ $('oBend').textContent=elbow(armL).toFixed(2)+'°';
+ $('oSw').textContent=(2*elbow(armL)).toFixed(2)+'°';
+ $('oExc').textContent=(100*(armL-1)).toFixed(2)+' %';
+ const rad=g.reduce((s,e)=>s+nrm(e.mid),0)/12, r0=Math.SQRT2;
+ $('oMid').textContent=rad.toFixed(4);
+ $('oMidD').textContent=(rad>=r0?'+':'')+(100*(rad/r0-1)).toFixed(3)+' %';
+
+ const bd=$('badge');
+ if(!fits){
+  bd.textContent='arms do not meet — not a state';
+  bd.style.background='color-mix(in srgb,'+cAm+' 22%,transparent)'; bd.style.color=cAm;
+  $('warn').classList.add('show');
+ }else{
+  bd.textContent=st? 'state 1  ·  θ = +θ*' : 'state 0  ·  θ = −θ*';
+  const col=st?cB:cA;
+  bd.style.background='color-mix(in srgb,'+col+' 18%,transparent)'; bd.style.color=col;
+  $('warn').classList.remove('show');
+ }
+ $('b0').classList.toggle('on', fits&&!st);
+ $('b1').classList.toggle('on', fits&&st);
+}
+
+/* ---------- interaction ---------- */
+function snapTo(sgn){
+ const ts=thetaStar(armL); if(ts===null) return;
+ const t0=theta, dt=sgn*ts-t0; let k=0;
+ if(anim) cancelAnimationFrame(anim);
+ (function step(){
+  k++; const u=Math.min(1,k/38), e=u<.5?4*u*u*u:1-Math.pow(-2*u+2,3)/2;
+  theta=t0+dt*e; $('sl').value=(theta/DEG).toFixed(2); draw();
+  if(u<1) anim=requestAnimationFrame(step); else anim=null;
+ })();
+}
+$('b0').onclick=()=>{if(cyc){clearInterval(cyc);cyc=null;$('bcyc').textContent='Cycle ⟳';}snapTo(-1);};
+$('b1').onclick=()=>{if(cyc){clearInterval(cyc);cyc=null;$('bcyc').textContent='Cycle ⟳';}snapTo(1);};
+$('bcyc').onclick=function(){
+ if(cyc){clearInterval(cyc);cyc=null;this.textContent='Cycle ⟳';return;}
+ this.textContent='Stop ■'; let s=theta>=0?-1:1; snapTo(s);
+ cyc=setInterval(()=>{s=-s;snapTo(s);},1500);
+};
+$('sl').oninput=e=>{if(anim)cancelAnimationFrame(anim);theta=(+e.target.value)*DEG;draw();};
+function setDesign(deg){
+ if(anim){cancelAnimationFrame(anim);anim=null;}
+ thStar=deg*DEG; armL=lreq(thStar);
+ theta=(theta<0?-1:1)*thStar;                 /* stay assembled while you drag */
+ $('slp').value=deg.toFixed(1);
+ $('sl').value=(theta/DEG).toFixed(2);
+ draw();
+}
+$('slp').oninput=e=>setDesign(+e.target.value);
+document.querySelectorAll('.preset').forEach(b=>b.onclick=()=>setDesign(+b.dataset.t));
+['cRef','cTick','cSpin','cHinge','cPlot'].forEach(id=>$(id).onchange=draw);
+
+let drag=null;
+svg.addEventListener('pointerdown',e=>{drag=[e.clientX,e.clientY];svg.classList.add('drag');svg.setPointerCapture(e.pointerId);});
+svg.addEventListener('pointermove',e=>{if(!drag)return;
+ az+=(e.clientX-drag[0])*0.008; elev=Math.max(-1.4,Math.min(1.4,elev+(e.clientY-drag[1])*0.008));
+ drag=[e.clientX,e.clientY]; draw();});
+svg.addEventListener('pointerup',e=>{drag=null;svg.classList.remove('drag');});
+svg.addEventListener('pointercancel',()=>{drag=null;svg.classList.remove('drag');});
+matchMedia('(prefers-color-scheme:dark)').addEventListener('change',draw);
+
+draw();
+})();
+</script>
+</div></body></html>

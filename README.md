@@ -25,7 +25,18 @@ All animations are published via GitHub Pages at
 | THR Train Track — Hinge Rail Contraction/Expansion | [thr_hinge_traintrack.html](https://juyoung01.github.io/ProjectAnimation/thr_hinge_traintrack.html) |
 | Train Track Hinge — 1D Contraction/Expansion | [traintrack_hinge_schematic.html](https://juyoung01.github.io/ProjectAnimation/traintrack_hinge_schematic.html) |
 | Two-Color Hinge Walker — Green/Blue Hinge Sets on a Filament | [two_color_hinge_walker_animation.html](https://juyoung01.github.io/ProjectAnimation/two_color_hinge_walker_animation.html) |
-| Mode B — Double-Hinge Chiral Twist | [modeB_animation.html](https://juyoung01.github.io/ProjectAnimation/modeB_animation.html) |
+
+## Cage Modes & Arrays
+
+| Animation | Link |
+| --- | --- |
+| Mode B — Double-Hinge Chiral Twist (single octahedral cage) | [modeB_animation.html](https://juyoung01.github.io/ProjectAnimation/modeB_animation.html) |
+| Mode A on the Cube — One Hinge per Edge | [cube_modeA_animation.html](https://juyoung01.github.io/ProjectAnimation/cube_modeA_animation.html) |
+| Mode A in 3D — 3×3×3 Block of Even-Prism Cages | [modeA_3d_array.html](https://juyoung01.github.io/ProjectAnimation/modeA_3d_array.html) |
+| Mode B in 2D — Square Array of Double-Hinge Octahedral Cages | [modeB_2d_array.html](https://juyoung01.github.io/ProjectAnimation/modeB_2d_array.html) |
+| Mode B in 3D — Shared-Hub Array | [modeB_3d_array.html](https://juyoung01.github.io/ProjectAnimation/modeB_3d_array.html) |
+| Mode B Lattice Mechanics — 25 Octahedra, 300 Constraints | [modeB_lattice3d.html](https://juyoung01.github.io/ProjectAnimation/modeB_lattice3d.html) |
+| Working Cages in 2D — Rhombic, Square, Honeycomb Nets | [works_array_animation.html](https://juyoung01.github.io/ProjectAnimation/works_array_animation.html) |
 
 ## Filament & Motility
 

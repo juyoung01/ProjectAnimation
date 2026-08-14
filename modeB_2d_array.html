@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mode B in 2D — a square array of double-hinge octahedral cages</title>
+<style>
+:root{--paper:#FCFCFA;--ink:#1A1A1A;--sub:#5C6068;--card:#FFF;--line:#E3E3DF;
+ --teal:#1B7F72;--orng:#E2662F;--navy:#3D5A80;--ambr:#E9B44C;--grey:#8A8F98;--vio:#6C5CE7;--red:#C0392B}
+@media(prefers-color-scheme:dark){:root{--paper:#14161A;--ink:#E8E8E6;--sub:#9AA0A8;--card:#1B1E23;--line:#2C3037}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+ font:15px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:32px 20px 60px}
+.wrap{max-width:1180px;margin:0 auto}
+h1{font-size:23px;font-weight:650;letter-spacing:-.02em;margin:0 0 4px}
+.sub{color:var(--sub);font-size:14.5px;margin:0 0 24px;max-width:84ch}
+.layout{display:grid;grid-template-columns:1fr 340px;gap:22px;align-items:start}
+@media(max-width:900px){.layout{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:18px 20px}
+.stage{padding:8px;position:relative}
+#view{width:100%;height:auto;display:block;cursor:grab;touch-action:none}
+#view.drag{cursor:grabbing}
+.badge{display:none}
+h3{font-size:12.5px;font-weight:650;text-transform:uppercase;letter-spacing:.05em;color:var(--sub);margin:0 0 12px}
+button{font:inherit;font-size:12.5px;font-weight:600;padding:9px 4px;border-radius:9px;
+ border:1.5px solid var(--line);background:transparent;color:var(--ink);cursor:pointer;transition:.15s}
+button:hover{border-color:var(--sub)}
+button.wide{width:100%;margin-top:9px}
+label.row{display:flex;justify-content:space-between;font-size:13px;color:var(--sub);margin:14px 0 5px}
+label.row b{color:var(--ink);font-variant-numeric:tabular-nums;font-family:ui-monospace,Menlo,monospace}
+input[type=range]{width:100%;accent-color:var(--vio)}
+.chk{display:flex;align-items:center;gap:8px;font-size:13px;margin:7px 0;cursor:pointer}
+.chk input{accent-color:var(--navy)}
+table{border-collapse:collapse;width:100%;font-size:13px;margin-top:4px}
+td{padding:5px 0;border-bottom:1px solid var(--line)}
+td:last-child{text-align:right;font-family:ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}
+td.lab{color:var(--sub)}
+.note{font-size:12.8px;color:var(--sub);line-height:1.55;margin-top:14px}
+.eq{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;background:color-mix(in srgb,var(--vio) 9%,transparent);
+ padding:2px 7px;border-radius:5px}
+.caveat{border-left:3px solid var(--red);background:color-mix(in srgb,var(--red) 8%,transparent);
+ padding:12px 14px;border-radius:9px;margin-top:22px;font-size:13.3px;line-height:1.6}
+</style></head><body><div class="wrap">
+
+<h1>Mode B in 2D — a square array of double-hinge octahedral cages</h1>
+<p class="sub">The adopted unit: six hubs at the octahedron vertices, <b>two hinges per edge</b>, each edge a chain
+hub–[arm p]–H1–[bar q]–H2–[arm p]–hub. All six hubs turn the same way, so the symmetry runs O<sub>h</sub> → O.
+Here that cage is tiled by fusing antipodal corners. The ±x and ±y corners carry the sheet; the <b>±z corners stay free</b>,
+which is what a third dimension would use.</p>
+
+<div class="layout">
+<div class="card stage"><div class="badge" id="badge"></div><svg id="view" viewBox="0 0 760 620" role="img"><title>Square array of Mode B octahedral cages</title></svg></div>
+
+<div>
+<div class="card" style="margin-bottom:16px">
+<h3>Drive</h3>
+<label class="row"><span>design twist θ*</span><b id="rp">31.35°</b></label>
+<input type="range" id="slp" min="5" max="55" step="0.05" value="31.3469">
+<label class="row" style="margin-top:12px"><span>arm λ = p/D</span><b id="rl">0.3301</b></label>
+<input type="range" id="sll" min="0.15" max="0.48" step="0.0005" value="0.3301">
+<label class="row" style="margin-top:12px"><span>patch size</span><b id="rn">3 × 3</b></label>
+<input type="range" id="sln" min="2" max="4" step="1" value="3">
+<label class="row" style="margin-top:12px"><span>sweep s</span><b id="rs">+1.00</b></label>
+<input type="range" id="sls" min="-1" max="1" step="0.005" value="1">
+<button class="wide" id="bplay">▶ Play the switch</button>
+<button class="wide" id="bsync">Synchronize monomers (lock)</button>
+<button class="wide" id="brand">Randomise the state</button>
+<button class="wide" id="breset">Reset to a valid state</button>
+<div style="margin-top:12px">
+<label class="chk"><input type="checkbox" id="cFree" checked> highlight the free ±z corners</label>
+<label class="chk"><input type="checkbox" id="cOne"> show one cage only</label>
+</div>
+</div>
+
+<div class="card">
+<h3>Result</h3>
+<table>
+<tr><td class="lab">bar length q &nbsp;<span style="opacity:.55">derived</span></td><td id="oQ">–</td></tr>
+<tr><td class="lab">hinge bend &nbsp;<span style="opacity:.55">derived</span></td><td id="oBend">–</td></tr>
+<tr><td class="lab">actuator stroke 2·bend</td><td id="oStroke">–</td></tr>
+<tr><td class="lab">hub twist 2θ*</td><td id="oTw" style="color:var(--vio)">–</td></tr>
+<tr><td class="lab">contour excess</td><td id="oExc">–</td></tr>
+<tr><td class="lab">cages / fusions</td><td id="oNL">–</td></tr>
+<tr><td class="lab">lattice</td><td id="oLat">–</td></tr>
+<tr><td class="lab">bond sign J</td><td id="oJ">–</td></tr>
+<tr><td class="lab">ordering</td><td id="oOrd">–</td></tr>
+<tr><td class="lab"><b>fusions intact</b></td><td id="oBrk">–</td></tr>
+<tr><td class="lab">↳ max orientation mismatch</td><td id="oCl">–</td></tr>
+<tr><td class="lab">connector extension</td><td id="oBar">–</td></tr>
+<tr><td class="lab">cages forced by one</td><td id="oForced">–</td></tr>
+<tr><td class="lab">global states</td><td id="oStates" style="color:var(--orng)">–</td></tr>
+</table>
+<div class="note" id="verdict" style="margin-top:12px"></div>
+</div>
+</div>
+</div>
+
+<div class="card" style="margin-top:22px">
+<h3>Why the shared hubs rotate together</h3>
+<div class="note" style="font-size:13.5px;margin-top:0;max-width:none">
+<p style="margin-top:0">This is a <b>rotation-only</b> model. Each fused corner is represented by one physical hub and one spatial
+rotation matrix. Every arm incident on that corner is transformed by that same matrix. The purple connector between the two
+hinges may telescope during the sweep; its length is not a constraint.</p>
+<p style="text-align:center"><span class="eq">J = −σ<sub>a</sub>σ<sub>ā</sub> = −1 &nbsp;·&nbsp; true 90° square lattice, |t| = 2R &nbsp;·&nbsp; checkerboard ordering</span></p>
+<p>All six hubs share σ = +1 — that is what the second hinge buys — so an antipodal fusion gives J = −1 and neighbouring cages must
+sit in <b>opposite</b> states. The square lattice has only 4-cycles, so ∏J = +1 and the sheet can never be frustrated. One cage
+forces every other.</p>
+<p><b>Through the sweep the corner welds never break</b> (mismatch stays at 0.00e+00 from s = +1 to s = −1). The blue tick on
+each fusion shows the shared hub orientation. Because antipodal local axes point in opposite directions, neighbouring cages use
+opposite signed angles: R(−n,−θ) = R(n,θ). Thus both sides execute exactly the same spatial rotation.</p>
+</div>
+</div>
+
+<div class="caveat">
+<b>Naming, since it was muddled earlier.</b> In this project <b>Mode A / B / C = one / two / four hinges per edge</b>
+(<code>modeB_protein_transistor.md</code> §3). This page is the real Mode B. The companion page
+<code>modeA_3d_array.html</code> is Mode A — one hinge per edge, even prisms, stacked 3×3×3.
+<br><br>
+<b>Scope.</b> Kinematic rotation model with welded rigid hubs and length-compliant (telescoping or elastic) connectors. Energies,
+forces and steric overlap between non-bonded cages are not checked.
+</div>
+
+<script>
+(function(){
+"use strict";
+const DEG=Math.PI/180, $=id=>document.getElementById(id);
+const sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]];
+const add=(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]];
+const mul=(a,s)=>[a[0]*s,a[1]*s,a[2]*s];
+const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+const nrm=a=>Math.hypot(a[0],a[1],a[2]);
+const unit=a=>{const n=nrm(a);return n<1e-12?[0,0,0]:mul(a,1/n);};
+function rotM(ax,t){const a=unit(ax),c=Math.cos(t),s=Math.sin(t),C=1-c,[x,y,z]=a;
+ return[[c+x*x*C,x*y*C-z*s,x*z*C+y*s],[y*x*C+z*s,c+y*y*C,y*z*C-x*s],[z*x*C-y*s,z*y*C+x*s,c+z*z*C]];}
+const mv=(M,v)=>[dot(M[0],v),dot(M[1],v),dot(M[2],v)];
+const mm=(A,B)=>A.map(r=>[0,1,2].map(j=>r[0]*B[0][j]+r[1]*B[1][j]+r[2]*B[2][j]));
+const mT=A=>[0,1,2].map(i=>[0,1,2].map(j=>A[j][i]));
+const mdiff=(A,B)=>{let m=0;for(let i=0;i<3;i++)for(let j=0;j<3;j++)m=Math.max(m,Math.abs(A[i][j]-B[i][j]));return m;};
+
+/* ---- the Mode B cage: octahedron, TWO hinges per edge, all sigma = +1 ---- */
+const R=1, D=Math.SQRT2*R;
+const V=[[R,0,0],[-R,0,0],[0,R,0],[0,-R,0],[0,0,R],[0,0,-R]];
+const E=[[0,2],[0,3],[0,4],[0,5],[1,2],[1,3],[1,4],[1,5],[2,4],[2,5],[3,4],[3,5]];
+const SIG=[1,1,1,1,1,1];
+const ZCORNERS=[4,5];
+function edgeFrame(e,th,lam){
+ const [i,j]=E[e], p=lam*D;
+ const ni=unit(V[i]), nj=unit(V[j]), u=mul(sub(V[j],V[i]),1/D);
+ const H1=add(V[i], mul(mv(rotM(ni,th),u),p));
+ const H2=add(V[j], mul(mv(rotM(nj,th),mul(u,-1)),p));
+ const gap=nrm(sub(H2,H1)), bd=mul(sub(H2,H1),1/gap);
+ const bend=Math.acos(Math.max(-1,Math.min(1,dot(mv(rotM(ni,th),u),bd))))/DEG;
+ return {H1,H2,gap,bend};
+}
+function antipode(a){for(let b=0;b<6;b++) if(nrm(add(V[b],V[a]))<1e-12) return b; return -1;}
+function cornerDelta(a,multNow,multDesign,th){
+ const n=unit(V[a]);
+ return mm(rotM(n,SIG[a]*multNow*th), mT(rotM(n,SIG[a]*multDesign*th)));
+}
+
+/* A welded corner is one physical hub, not two independently animated cage
+   vertices.  Return its spatial rotation increment from the assembled state.
+   Antipodal neighbours have opposite local axes and opposite eps, so both
+   sides obtain exactly the same matrix. */
+function hubDelta(si,a){
+ return cornerDelta(a,eps[si]*phase,eps0[si],thStar);
+}
+
+let thStar=31.3469*DEG, lam=0.3301, M=3, qBuilt=0;
+let sites=[], bonds=[], eps=[], eps0=[], phase=1, playing=false, raf=null, dir=-1, syncLocked=false, patternLocked=false;
+const isLocked=()=>syncLocked||patternLocked;
+const violatesWelds=()=>bonds.some(bd=>eps[bd.y]!==-eps[bd.x]);
+function rebuild(){
+ qBuilt=edgeFrame(0,thStar,lam).gap;
+ const t1=mul(V[0],2), t2=mul(V[2],2);       /* +-x and +-y corners carry the sheet */
+ sites=[]; bonds=[]; const idx={};
+ for(let i=0;i<M;i++)for(let j=0;j<M;j++){
+  idx[i+','+j]=sites.length;
+  sites.push({c:add(mul(t1,i-(M-1)/2),mul(t2,j-(M-1)/2))});
+ }
+ for(let i=0;i<M;i++)for(let j=0;j<M;j++){
+  if(i+1<M) bonds.push({x:idx[i+','+j],y:idx[(i+1)+','+j],a:0,b:antipode(0)});
+  if(j+1<M) bonds.push({x:idx[i+','+j],y:idx[i+','+(j+1)],a:2,b:antipode(2)});
+ }
+ if(syncLocked) setSynchronized(); else resetState();
+}
+function resetState(){
+ const n=sites.length, adj=sites.map(()=>[]);
+ const J=-SIG[0]*SIG[antipode(0)];
+ bonds.forEach(bd=>{adj[bd.x].push([bd.y,J]);adj[bd.y].push([bd.x,J]);});
+ eps=new Array(n).fill(0); eps[0]=1; const q=[0];
+ while(q.length){const v=q.shift(); for(const [w,j] of adj[v]) if(eps[w]===0){eps[w]=j*eps[v];q.push(w);}}
+ for(let i=0;i<n;i++) if(eps[i]===0) eps[i]=1;
+ eps0=eps.slice(); phase=1; patternLocked=false;
+}
+function setSynchronized(){
+ eps=new Array(sites.length).fill(1); eps0=eps.slice(); phase=1; patternLocked=false;
+}
+
+let az=0.65, elev=0.62, drag=null;
+const svg=$('view'), NS='http://www.w3.org/2000/svg';
+const cvar=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function el(t,at){const e=document.createElementNS(NS,t);for(const k in at)e.setAttribute(k,at[k]);return e;}
+const View=()=>mm(rotM([1,0,0],-elev),rotM([0,0,1],az));
+
+function draw(){
+ while(svg.firstChild) svg.removeChild(svg.firstChild);
+ const V3=View();
+ const cA=cvar('--teal'),cB=cvar('--orng'),cAm=cvar('--ambr'),cS=cvar('--sub'),
+       cV=cvar('--vio'),cN=cvar('--navy'),cCard=cvar('--card');
+ const one=$('cOne').checked, show=one?[sites[Math.floor(sites.length/2)]]:sites;
+ const shift=one?Math.floor(sites.length/2):0;
+ let barMis=0;
+ const cages=show.map((s,k)=>{
+  const si=one?shift:k, mult=eps[si]*phase, th=mult*thStar, segs=[];
+  for(let e=0;e<E.length;e++){
+   const [i,j]=E[e], f=edgeFrame(e,th,lam);
+   /* Build both arms from the shared hubs' single rotation increments.
+      The reference arms are the actually welded phase=+1 configuration. */
+   const f0=edgeFrame(e,eps0[si]*thStar,lam);
+   const Hi=add(V[i],mv(hubDelta(si,i),sub(f0.H1,V[i])));
+   const Hj=add(V[j],mv(hubDelta(si,j),sub(f0.H2,V[j])));
+   barMis=Math.max(barMis,Math.abs(f.gap-qBuilt));
+   segs.push([add(s.c,V[i]),add(s.c,Hi),'arm']);
+   segs.push([add(s.c,Hi),add(s.c,Hj),'bar']);
+   segs.push([add(s.c,Hj),add(s.c,V[j]),'arm']);
+  }
+  return {segs,si};
+ });
+ const pts=[]; cages.forEach(c=>c.segs.forEach(([a,b])=>pts.push(a,b)));
+ const pr=p=>{const q=mv(V3,p);return [q[0],-q[2],q[1]];};
+ let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+ for(const p of pts){const s=pr(p);x0=Math.min(x0,s[0]);x1=Math.max(x1,s[0]);y0=Math.min(y0,s[1]);y1=Math.max(y1,s[1]);}
+ const W=760,H=620,m=44;
+ const sc=Math.min((W-2*m)/Math.max(1e-6,x1-x0),(H-2*m)/Math.max(1e-6,y1-y0));
+ const ox=W/2-sc*(x0+x1)/2, oy=H/2-sc*(y0+y1)/2;
+ const Pj=p=>{const s=pr(p);return [ox+sc*s[0],oy+sc*s[1],s[2]];};
+ const items=[];
+ cages.forEach(cg=>{
+  const col=eps[cg.si]>0?cA:cB;
+  cg.segs.forEach(([a,b,tag])=>{const pa=Pj(a),pb=Pj(b);
+   const st = tag==='badbar'?cAm:(tag==='bar'?cV:col);
+   items.push({d:(pa[2]+pb[2])/2,f:()=>svg.appendChild(el('line',{x1:pa[0],y1:pa[1],x2:pb[0],y2:pb[1],
+    stroke:st,'stroke-width':tag==='arm'?2.4:3,'stroke-linecap':'round',
+    'stroke-dasharray':tag==='badbar'?'4 3':'none',opacity:(pa[2]+pb[2])/2<0?0.35:0.95}))});});
+  if($('cFree').checked) for(const z of ZCORNERS){
+   const p=Pj(add(sites[cg.si].c,V[z]));
+   items.push({d:p[2]+30,f:()=>svg.appendChild(el('circle',{cx:p[0],cy:p[1],r:5,fill:'none',
+    stroke:cN,'stroke-width':2.2}))});
+  }
+ });
+ let broken=0,worst=0;
+ if(!one) bonds.forEach(bd=>{
+  const e=mdiff(cornerDelta(bd.a,eps[bd.x]*phase,eps0[bd.x],thStar),
+                cornerDelta(bd.b,eps[bd.y]*phase,eps0[bd.y],thStar));
+  worst=Math.max(worst,e); const bad=e>1e-10; if(bad) broken++;
+  const p=Pj(add(sites[bd.x].c,V[bd.a]));
+  items.push({d:p[2]+40,f:()=>svg.appendChild(el('circle',{cx:p[0],cy:p[1],r:bad?5:3.8,
+   fill:bad?cAm:cV,stroke:cCard,'stroke-width':1.1}))});
+ });
+ /* Orientation ticks make the otherwise point-like welded hubs visibly turn.
+    Draw each shared hub only once, using the rotation owned by its first cage. */
+ if(!one){
+  const drawn=new Set();
+  bonds.forEach(bd=>{
+   const wp=add(sites[bd.x].c,V[bd.a]), key=wp.map(x=>x.toFixed(8)).join(',');
+   if(drawn.has(key))return; drawn.add(key);
+   const axis=unit(V[bd.a]);
+   let ref=Math.abs(axis[2])<0.9?[0,0,1]:[1,0,0];
+   ref=unit(sub(ref,mul(axis,dot(ref,axis))));
+   const t=mv(hubDelta(bd.x,bd.a),ref);
+   const pa=Pj(add(wp,mul(t,-0.13))), pb=Pj(add(wp,mul(t,0.13)));
+   items.push({d:(pa[2]+pb[2])/2+41,f:()=>svg.appendChild(el('line',{
+    x1:pa[0],y1:pa[1],x2:pb[0],y2:pb[1],stroke:cN,'stroke-width':3.2,'stroke-linecap':'round'
+   }))});
+  });
+ }
+ items.sort((a,b)=>a.d-b.d).forEach(o=>o.f());
+ if(!one) sites.forEach((s,si)=>{const p=Pj(s.c);
+  const c=el('circle',{cx:p[0],cy:p[1],r:14,fill:'transparent',style:'cursor:pointer'});
+  c.addEventListener('click',ev=>{ev.stopPropagation();if(syncLocked)return;stop();eps[si]=-eps[si];eps0=eps.slice();patternLocked=violatesWelds();phase=1;$('sls').value=1;stop();draw();});
+  svg.appendChild(c);});
+ const f0=edgeFrame(0,thStar,lam), p=lam*D;
+ const adj=sites.map(()=>[]); bonds.forEach(bd=>{adj[bd.x].push(bd.y);adj[bd.y].push(bd.x);});
+ const seen=new Set([0]),q2=[0];
+ while(q2.length){const v=q2.shift();for(const w of adj[v]) if(!seen.has(w)){seen.add(w);q2.push(w);}}
+ const gaps=E.map((_,e)=>edgeFrame(e,thStar,lam).gap);
+ $('oQ').textContent=qBuilt.toFixed(6)+'  (spread '+(Math.max(...gaps)-Math.min(...gaps)).toExponential(1)+')';
+ $('oBend').textContent=f0.bend.toFixed(4)+'°';
+ $('oStroke').textContent=(2*f0.bend).toFixed(4)+'°';
+ $('oTw').textContent=(2*thStar/DEG).toFixed(4)+'°';
+ $('oExc').textContent=(100*((2*p+qBuilt)/D-1)).toFixed(3)+' %';
+ $('oNL').textContent=sites.length+' / '+bonds.length;
+ $('oLat').textContent='square 90.0000°, |t| = '+(2*R).toFixed(4);
+ $('oJ').textContent=syncLocked?'incompatible (+1)':'all −1';
+ $('oOrd').textContent=syncLocked?'same local sign · locked':(patternLocked?'random commands · interlocked':'checkerboard');
+ $('oBrk').textContent=one?'–':((bonds.length-broken)+' / '+bonds.length);
+ $('oBrk').style.color=broken?cAm:cA;
+ $('oCl').textContent=one?'–':worst.toExponential(2);
+ $('oBar').textContent='free  (Δ = '+barMis.toFixed(4)+')';
+ $('oBar').style.color=cV;
+ $('oForced').textContent=seen.size+' / '+sites.length;
+ $('oStates').textContent='2';
+ $('sls').disabled=isLocked();
+ $('rp').textContent=(thStar/DEG).toFixed(2)+'°';
+ $('rl').textContent=lam.toFixed(4);
+ $('rn').textContent=M+' × '+M;
+ $('rs').textContent=(phase>=0?'+':'')+phase.toFixed(2);
+ const bd2=$('badge'), settled=Math.abs(Math.abs(phase)-1)<1e-6;
+ if(isLocked()){
+  bd2.textContent='INTERLOCKED — rigid welds forbid rotation';
+  $('verdict').innerHTML='<b style="color:'+cAm+'">Interlocked (DOF = 0).</b> The commanded monomer signs violate one or more rigid-weld constraints. '+
+   'Play applies a small elastic trial, then the array jams and returns to its welded rest state.';
+ }else if(broken>0){
+  bd2.textContent=broken+' of '+bonds.length+' fusions broken';
+  bd2.style.background='color-mix(in srgb,'+cAm+' 22%,transparent)';bd2.style.color=cAm;
+  $('verdict').innerHTML='<b style="color:'+cAm+'">Out of step.</b> '+broken+' fusions would have to shear by up to '+
+   worst.toFixed(3)+'. With J = −1 a cage must sit opposite to each of its neighbours.';
+ }else if(settled&&barMis<1e-9){
+  bd2.textContent=(phase>0?'state 1':'state 0')+' — θ = '+(phase>0?'+':'−')+(thStar/DEG).toFixed(2)+'°';
+  const col=phase>0?cB:cA;
+  bd2.style.background='color-mix(in srgb,'+col+' 18%,transparent)';bd2.style.color=col;
+  $('verdict').innerHTML='<b style="color:'+cA+'">Valid.</b> Twelve bars all at q = '+qBuilt.toFixed(4)+
+   ', bend '+f0.bend.toFixed(3)+'°, excess '+(100*((2*p+qBuilt)/D-1)).toFixed(2)+'%. '+
+   (one?'':'All '+bonds.length+' fusions intact; one cage forces '+seen.size+' of '+sites.length+'. Two global states.');
+ }else{
+  bd2.textContent='mid-sweep — welded hubs rotate together';
+  bd2.style.background='color-mix(in srgb,'+cV+' 18%,transparent)';bd2.style.color=cV;
+  $('verdict').innerHTML='<b style="color:'+cV+'">In transit.</b> '+
+   (one?'':'Every fusion remains intact ('+worst.toExponential(1)+') and each blue orientation tick is shared by both cages. ')+
+   'Connector length is unconstrained in this rotation-only animation.';
+ }
+}
+function stop(){playing=false;if(raf)cancelAnimationFrame(raf);raf=null;$('bplay').textContent=isLocked()?'▶ Attempt rotation (interlocked)':'▶ Play the switch';}
+function jamAttempt(){stop();playing=true;$('bplay').textContent='Interlocking…';let k=0;
+ (function step(){if(!playing)return;k=Math.min(1,k+.035);phase=1-.08*Math.sin(Math.PI*k);$('sls').value=phase;draw();
+  if(k<1)raf=requestAnimationFrame(step);else{playing=false;phase=1;$('sls').value=1;$('bplay').textContent='▶ Attempt rotation (interlocked)';draw();}})();}
+function tick(){if(!playing)return;
+ phase+=dir*0.010;
+ if(phase>=1){phase=1;dir=-1;}else if(phase<=-1){phase=-1;dir=1;}
+ $('sls').value=phase.toFixed(3);draw();raf=requestAnimationFrame(tick);}
+$('slp').oninput=e=>{thStar=(+e.target.value)*DEG; rebuild(); draw();};
+$('sll').oninput=e=>{lam=+e.target.value; rebuild(); draw();};
+$('sln').oninput=e=>{M=+e.target.value; rebuild(); draw();};
+$('sls').oninput=e=>{stop(); phase=+e.target.value; draw();};
+$('bplay').onclick=function(){if(playing){stop();return;}
+ if(isLocked()){jamAttempt();return;}
+ playing=true;this.textContent='⏸ Stop';dir=phase>0?-1:1;raf=requestAnimationFrame(tick);};
+$('bsync').onclick=()=>{stop();syncLocked=!syncLocked;
+ if(syncLocked)setSynchronized();else resetState();
+ $('sls').value=1;$('sls').disabled=syncLocked;$('brand').disabled=syncLocked;
+ $('bsync').textContent=syncLocked?'Restore checkerboard rotation':'Synchronize monomers (lock)';stop();draw();};
+$('brand').onclick=()=>{stop(); for(let i=0;i<eps.length;i++) eps[i]=Math.random()<0.5?1:-1;
+ eps0=eps.slice();patternLocked=violatesWelds();phase=1;$('sls').value=1;stop();draw();};
+$('breset').onclick=()=>{stop(); if(syncLocked)setSynchronized();else resetState(); $('sls').value=1; draw();};
+['cFree','cOne'].forEach(id=>$(id).onchange=draw);
+svg.addEventListener('pointerdown',e=>{drag=[e.clientX,e.clientY];svg.classList.add('drag');svg.setPointerCapture(e.pointerId);});
+svg.addEventListener('pointermove',e=>{if(!drag)return;
+ az+=(e.clientX-drag[0])*0.008; elev=Math.max(-1.5,Math.min(1.5,elev+(e.clientY-drag[1])*0.008));
+ drag=[e.clientX,e.clientY];draw();});
+svg.addEventListener('pointerup',()=>{drag=null;svg.classList.remove('drag');});
+svg.addEventListener('pointercancel',()=>{drag=null;svg.classList.remove('drag');});
+matchMedia('(prefers-color-scheme:dark)').addEventListener('change',draw);
+rebuild(); draw();
+})();
+</script>
+</div></body></html>
