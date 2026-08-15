@@ -37,6 +37,7 @@ All animations are published via GitHub Pages at
 | Mode B in 3D — Shared-Hub Array | [modeB_3d_array.html](https://juyoung01.github.io/ProjectAnimation/modeB_3d_array.html) |
 | Mode B Lattice Mechanics — 25 Octahedra, 300 Constraints | [modeB_lattice3d.html](https://juyoung01.github.io/ProjectAnimation/modeB_lattice3d.html) |
 | Working Cages in 2D — Rhombic, Square, Honeycomb Nets | [works_array_animation.html](https://juyoung01.github.io/ProjectAnimation/works_array_animation.html) |
+| Mode A 3D Grid — Y-Lambda 5° Geometry | [ylambda_5deg_3d_grid.html](https://juyoung01.github.io/ProjectAnimation/ylambda_5deg_3d_grid.html) |
 
 ## Filament & Motility
 
