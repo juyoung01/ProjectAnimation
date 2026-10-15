@@ -39,6 +39,14 @@ All animations are published via GitHub Pages at
 | Working Cages in 2D — Rhombic, Square, Honeycomb Nets | [works_array_animation.html](https://juyoung01.github.io/ProjectAnimation/works_array_animation.html) |
 | Mode A 3D Grid — Y-Lambda 5° Geometry | [ylambda_5deg_3d_grid.html](https://juyoung01.github.io/ProjectAnimation/ylambda_5deg_3d_grid.html) |
 
+## Computase — Binary Cage Logic
+
+| Animation | Link |
+| --- | --- |
+| Connected Cages — Rule 110 Cell, Signal Bridges, Connected Lattice (opens on the cell tab) | [binary_cage_rule110_en.html](https://juyoung01.github.io/ProjectAnimation/binary_cage_rule110_en.html) |
+| Connected Cages — Eight Logic Gates Built from Rule 110 Cells (opens on the gates tab) | [binary_cage_logic_gates.html](https://juyoung01.github.io/ProjectAnimation/binary_cage_logic_gates.html) |
+| Computase Rule 232 — Four-Cage Majority Module, Crystal Lattice, AND/OR Gates | [computase_rule232_en.html](https://juyoung01.github.io/ProjectAnimation/computase_rule232_en.html) |
+
 ## Filament & Motility
 
 | Animation | Link |
